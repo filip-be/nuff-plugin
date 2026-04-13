@@ -1,0 +1,30 @@
+{
+    "name": "nuff",
+    "version": "1.12.0",
+    "description": "Take Azure DevOps work item as an input and do enough work to get it done.",
+    "author": {
+        "name": "filip-be"
+    },
+    "homepage": "https://github.com/filip-be/nuff-plugin",
+    "repository": "https://github.com/filip-be/nuff-plugin",
+    "license": "MIT",
+    "keywords": [
+        "azure-devops",
+        "work-item",
+        "automation",
+        "ai",
+        "ai-agent",
+        "enough",
+        "nuff"
+    ],
+    "agents": [
+        "./agents/nuff-codebase-analyzer.md",
+        "./agents/nuff-gap-analyzer.md",
+        "./agents/nuff-implementer.md",
+        "./agents/nuff-verifier.md",
+        "./agents/nuff-orchestrator.md"
+    ],
+    "commands": "./commands/",
+    "skills": "./skills/",
+    "mcpServers": "./.mcp.json"
+}
