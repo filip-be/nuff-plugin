@@ -12,6 +12,11 @@
       "name": "nuff",
       "source": "./plugins/nuff",
       "description": "Take Azure DevOps work item as an input and do enough work to get it done."
+    },
+    {
+      "name": "nuff-skills",
+      "source": "./plugins/nuff-skills",
+      "description": "Nuff skills (good enough skills)."
     }
   ]
 }

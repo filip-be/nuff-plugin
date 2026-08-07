@@ -1,0 +1,16 @@
+{
+    "name": "nuff-skills",
+    "version": "1.0.0",
+    "description": "Nuff skills (good enough skills).",
+    "homepage": "https://github.com/filip-be/nuff-plugin",
+    "repository": "https://github.com/filip-be/nuff-plugin",
+    "license": "MIT",
+    "keywords": [
+        "ai",
+        "ai-agent",
+        "enough",
+        "nuff",
+        "skills"
+    ],
+    "skills": "skills/"
+}
