@@ -45,7 +45,11 @@ Azure DevOps Work Item
 
 See the [nuff README](./plugins/nuff/README.md) for full documentation.
 
----
+### nuff-skills
+
+Set of skills that are good enough to improve your AI workflow (fork of [mattpocock/skills](https://github.com/mattpocock/skill)).
+
+See the [nuff-skills](./plugins/nuff-skills/README.md) README` for full documentation.
 
 ## Installation
 
