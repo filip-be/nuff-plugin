@@ -7,6 +7,14 @@ description: Build and sharpen a project's domain model. Use when the user wants
 
 Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
+## Domain model vs CLAUDE.md/AGENTS.md and README.md files
+
+README.md files are for humans. They contain a high-level overview of the project or domain, how to get started, how to deal with common problems, and how to contribute. Keep them lean — don't try to cram the entire domain model into a README.
+
+CLAUDE.md/AGENTS.md files are for AI agents. They are spread across different folders and read by the agents every time they reach for information. Adjust them only when the agents' behavior is wrong or suboptimal. No fluff there, they must be sharp and precise.
+
+CONTEXT.md files are both for humans and AI agents. They are the *canonical* source of truth for the domain model. They contain the glossary of terms, the relationships between concepts, and the boundaries of contexts. Update them inline as you resolve terms and make decisions.
+
 ## File structure
 
 Most repos have a single context:
