@@ -1,0 +1,19 @@
+{
+    "name": "nuff-hooks-cc",
+    "version": "1.0.0",
+    "description": "Claude Code only: good enough guardrail hooks - read only from D:\\, write only to the Workspace, move removed files to D:\\.slop-trash.",
+    "author": {
+        "name": "filip-be"
+    },
+    "homepage": "https://github.com/filip-be/nuff-plugin",
+    "repository": "https://github.com/filip-be/nuff-plugin",
+    "license": "MIT",
+    "keywords": [
+        "ai",
+        "ai-agent",
+        "enough",
+        "nuff",
+        "hooks",
+        "guardrails"
+    ]
+}

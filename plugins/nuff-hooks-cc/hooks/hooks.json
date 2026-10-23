@@ -1,0 +1,16 @@
+{
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Read|Write|Edit|NotebookEdit|Glob|Grep|Bash|PowerShell",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_hooks_cc.py\"",
+                        "timeout": 15
+                    }
+                ]
+            }
+        ]
+    }
+}
