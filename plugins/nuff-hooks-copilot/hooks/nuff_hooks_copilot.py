@@ -44,10 +44,14 @@ def decide(event: dict, args) -> core.Decision:
         return core.check_read(args.get("path", ""), ctx)
     if tool in ("create", "edit", "str_replace_editor"):
         return core.check_write(args.get("path", ""), ctx)
-    if tool == "glob":
-        return core.check_search(args.get("path"), args.get("pattern"), ctx)
-    if tool in ("grep", "rg"):
-        return core.check_search(args.get("path"), None, ctx)
+    if tool in ("glob", "grep", "rg"):
+        pattern = args.get("pattern") if tool == "glob" else None
+        roots = args.get("paths") or args.get("path") or [None]  # `paths` may be a string or a list
+        for root in [roots] if isinstance(roots, str) else roots:
+            decision = core.check_search(root, pattern, ctx)
+            if decision.kind == "deny":
+                return decision
+        return core.ALLOW
     if tool in SHELLS:
         return core.check_shell(args.get("command", ""), SHELLS[tool], ctx)
     if tool in SHELL_INPUTS:

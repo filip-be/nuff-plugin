@@ -490,6 +490,7 @@ BASH_VALUE_FLAGS = {
     "sed": {"-e", "-f", "--expression", "--file"},
     "awk": {"-f", "-v", "-F"},
 }
+FILE_VALUE_FLAGS = {"-f", "--file"}  # for the BASH_VALUE_FLAGS commands: the value is a file that is read
 
 
 def _name(token: str) -> str:
@@ -523,6 +524,7 @@ class _Args:
     positionals: list[str] = field(default_factory=list)
     paths: list[str] = field(default_factory=list)  # values of PATH_FLAGS
     dests: list[str] = field(default_factory=list)  # values of DEST_FLAGS
+    reads: list[str] = field(default_factory=list)  # values of FILE_VALUE_FLAGS
     flags: list[str] = field(default_factory=list)
 
 
@@ -551,14 +553,18 @@ def _parse_args(name: str, args: list[str], shell: str) -> _Args:
             parsed.paths.append(value)
         elif key in DEST_FLAGS and value:
             parsed.dests.append(value)
+        elif key in FILE_VALUE_FLAGS and key in value_flags and value:
+            parsed.reads.append(value)
     return parsed
 
 
 def _path_like(token: str) -> bool:
-    if not token or any(char.isspace() for char in token) or "://" in token:
+    if not token or "\n" in token or "://" in token or _PIPELINE_VARS.match(token):
         return False
-    if _PIPELINE_VARS.match(token):
-        return False
+    if re.match(r"^([A-Za-z]:[\\/]|\\\\|//|~[\\/]|\$env:|\$\{)", token, re.IGNORECASE):
+        return True  # absolute, even with spaces: `git -C "D:\other repo"`
+    if any(char.isspace() for char in token):
+        return False  # prose, e.g. a commit message
     if re.match(r"^[A-Za-z]:", token) or token.startswith("~") or token in (".", ".."):
         return True
     if "/" in token or "\\" in token:
@@ -595,38 +601,55 @@ def _strip_prefixes(argv: list[str], shell: str) -> list[str]:
     return argv
 
 
-def _nested_command(name: str, args: list[str]) -> str | None:
-    """The command string passed to a nested shell, or None when there is none."""
+def _nested_command(name: str, args: list[str]) -> tuple[str | None, str | None]:
+    """(command string passed to a nested shell, its working directory), or (None, None)."""
     if name == "cmd":
         for i, arg in enumerate(args):
             if arg.lower() in ("/c", "/k", "//c", "//k"):
-                return " ".join(args[i + 1 :])
-        return None
+                return " ".join(args[i + 1 :]), None
+        return None, None
     if NESTED[name] == "bash":
         for i, arg in enumerate(args):
             if re.fullmatch(r"-[a-z]*c[a-z]*", arg) and i + 1 < len(args):
-                return args[i + 1]
+                return args[i + 1], None
             if not arg.startswith("-"):
-                return None  # `bash script.sh`
-        return None
-    skip_value = {"-executionpolicy", "-ex", "-ep", "-workingdirectory", "-wd", "-outputformat",
-                  "-of", "-inputformat", "-if", "-configurationname", "-settingsfile", "-windowstyle", "-w"}
-    i = 0
+                return None, None  # `bash script.sh`
+        return None, None
+    skip_value = {"-executionpolicy", "-ex", "-ep", "-outputformat", "-of", "-inputformat", "-if",
+                  "-configurationname", "-settingsfile", "-windowstyle", "-w"}
+    workdir, i = None, 0
     while i < len(args):
         arg = args[i].lower()
         if arg in ("-e", "-ec") or (arg.startswith("-en") and "-encodedcommand".startswith(arg)) or arg.startswith("-encodedarg"):
             raise _Deny("encoded PowerShell commands are not allowed")
         if arg in ("-c", "-command") or (len(arg) > 2 and "-command".startswith(arg) and arg.startswith("-co")):
-            return " ".join(args[i + 1 :])
+            return " ".join(args[i + 1 :]), workdir
         if arg in ("-f", "-file") or (len(arg) > 2 and "-file".startswith(arg)):
-            return None
+            return None, None
+        if arg in ("-workingdirectory", "-wd") or (len(arg) > 2 and "-workingdirectory".startswith(arg)):
+            workdir = args[i + 1] if i + 1 < len(args) else None
+            i += 2
+            continue
         if arg in skip_value:
             i += 2
             continue
         if not arg.startswith("-"):
-            return " ".join(args[i:])
+            return " ".join(args[i:]), workdir
         i += 1
-    return None
+    return None, None
+
+
+def _substitutions(token: str) -> list[str]:
+    """Commands inside `$( ... )` of a token (e.g. a quoted string): the shell runs them."""
+    commands, i = [], 0
+    while (start := token.find("$(", i)) >= 0:
+        depth, j = 1, start + 2
+        while j < len(token) and depth:
+            depth += {"(": 1, ")": -1}.get(token[j], 0)
+            j += 1
+        commands.append(token[start + 2 : j - 1 if depth == 0 else j])
+        i = j
+    return [command for command in commands if command.strip()]
 
 
 # File-system classes only; [IO.Path] is pure string manipulation.
@@ -657,7 +680,7 @@ def _check_dotnet(command: str, ctx: Context, cwd: str) -> None:
         elif method.startswith(("move", "replace")):
             for target in literals[:2]:
                 _require_write(target, ctx, cwd, "powershell")
-        elif method.startswith(("read", "exists", "get", "enumerate", "open")) and method != "openwrite":
+        elif method.startswith(("read", "exists", "get", "enumerate", "openread", "opentext")):
             _require_read(literals[0], ctx, cwd, "powershell")
         else:
             _require_write(literals[0], ctx, cwd, "powershell")
@@ -680,6 +703,11 @@ def _check_command(command: str, shell: str, ctx: Context, cwd: str, depth: int)
         _check_dotnet(command, ctx, cwd)
     segments = parse(command, shell)
     found = _Found()
+    if shell == "bash":  # backticks run their content; tokenizing may split them apart
+        for inner in re.findall(r"`([^`]*)`", _strip_heredocs(command)):
+            if inner.strip():
+                _, inner_found = _check_command(inner, shell, ctx, cwd, depth)
+                found.nested_removal |= bool(inner_found.removal or inner_found.nested_removal)
     for segment in segments:
         cwd = _check_segment(segment, shell, ctx, cwd, depth, found)
     return segments, found
@@ -687,6 +715,11 @@ def _check_command(command: str, shell: str, ctx: Context, cwd: str, depth: int)
 
 def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: int, found: _Found) -> str:
     """Check one segment; returns the working directory for the segments after it."""
+    for token in segment.argv + [target for _, target in segment.redirects]:
+        for inner in _substitutions(token):
+            _, inner_found = _check_command(inner, shell, ctx, cwd, depth)
+            if inner_found.removal or inner_found.nested_removal:
+                found.nested_removal = True
     for op, target in segment.redirects:
         (_require_read if op == "<" else _require_write)(target, ctx, cwd, shell)
     argv = _strip_prefixes(segment.argv, shell)
@@ -697,13 +730,17 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
     if name in EVAL:
         raise _Deny(f"dynamic evaluation (`{argv[0]}`) is not allowed")
     if name in NESTED:
-        inner = _nested_command(name, args)
+        inner, workdir = _nested_command(name, args)
         if inner is not None:
             if depth >= 1:
                 raise _Deny("shells nested more than one level deep are not allowed")
             if NESTED[name] != "powershell" and ("$(" in inner or "`" in inner):
                 raise _Deny("a nested shell with command substitution is not allowed")
-            _, inner_found = _check_command(inner, NESTED[name], ctx, cwd, depth + 1)
+            inner_cwd = cwd
+            if workdir:
+                _require_read(workdir, ctx, cwd, shell)
+                inner_cwd = resolve(workdir, ctx, cwd, shell) or cwd
+            _, inner_found = _check_command(inner, NESTED[name], ctx, inner_cwd, depth + 1)
             if inner_found.removal or inner_found.nested_removal:
                 found.nested_removal = True
             return cwd
@@ -718,6 +755,8 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
         return _check_find(args, ctx, cwd, shell, found)
 
     parsed = _parse_args(name, args, shell)
+    for token in parsed.reads:
+        _require_read(token, ctx, cwd, shell)
     if name in CD:
         targets = parsed.positionals + parsed.paths
         if not targets or targets[0] == "-":

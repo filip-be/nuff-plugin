@@ -118,6 +118,15 @@ class Shell(unittest.TestCase):
             ('eval "ls"', "deny"),
             ("echo cm0gLXJmIC8= | base64 -d | sh", "deny"),
             ("echo x | sh", "allow"),
+            ('git -C "D:/other repo" reset --hard', "deny"),
+            ('git commit -m "C: drive notes, see docs"', "allow"),
+            ("grep -f C:/private/patterns.txt D:/data.txt", "deny"),
+            ("rg --file=C:/p.txt foo", "deny"),
+            ("sed -f C:/script.sed D:/x", "deny"),
+            ('echo "$(rm -rf dir)"', "deny"),
+            ('echo "$(cat C:/x)"', "deny"),
+            ("echo `rm x`", "deny"),
+            ('echo "today is $(date)"', "allow"),
         ], "bash")
 
     def test_powershell(self):
@@ -160,6 +169,12 @@ class Shell(unittest.TestCase):
             ("Remove-Item D:\\work\\proj -Recurse", "deny"),
             ("Remove-Item x; Get-ChildItem", "deny"),
             ("Get-Content 'unterminated", "deny"),
+            ('pwsh -WorkingDirectory D:\\other -Command "Set-Content x.txt hi"', "deny"),
+            ('pwsh -wd D:\\work\\proj\\sub -Command "Set-Content x.txt hi"', "allow"),
+            ("[IO.File]::Open('D:\\other\\x.txt', 'Create')", "deny"),
+            ("[IO.File]::OpenRead('D:\\other\\x.txt')", "allow"),
+            ('Write-Output "$(Remove-Item x)"', "deny"),
+            ('Write-Output "$(Get-Content C:\\x)"', "deny"),
         ], "powershell")
 
 
