@@ -127,6 +127,11 @@ class Shell(unittest.TestCase):
             ('echo "$(cat C:/x)"', "deny"),
             ("echo `rm x`", "deny"),
             ('echo "today is $(date)"', "allow"),
+            ('git -C "/d/other repo" reset --hard', "deny"),
+            ('git -C "../other repo" status', "deny"),
+            ("cd D:/other && echo `touch x`", "deny"),
+            ('cd D:/other && echo "$(touch x)"', "deny"),
+            ("echo `date`", "allow"),
         ], "bash")
 
     def test_powershell(self):

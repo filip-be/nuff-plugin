@@ -282,7 +282,9 @@ def _segments(tokens: list[tuple[str, bool]]) -> list[Segment]:
 
 
 def _tokenize_bash(command: str) -> list[tuple[str, bool]]:
-    lexer = shlex.shlex(_strip_heredocs(command), posix=True, punctuation_chars="();<>|&\n")
+    # Backticks run their content just like $( ); rewriting them keeps it checked in place.
+    command = re.sub(r"`([^`]*)`", r"$(\1)", _strip_heredocs(command))
+    lexer = shlex.shlex(command, posix=True, punctuation_chars="();<>|&\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     tokens: list[tuple[str, bool]] = []
@@ -561,8 +563,8 @@ def _parse_args(name: str, args: list[str], shell: str) -> _Args:
 def _path_like(token: str) -> bool:
     if not token or "\n" in token or "://" in token or _PIPELINE_VARS.match(token):
         return False
-    if re.match(r"^([A-Za-z]:[\\/]|\\\\|//|~[\\/]|\$env:|\$\{)", token, re.IGNORECASE):
-        return True  # absolute, even with spaces: `git -C "D:\other repo"`
+    if re.match(r"^([A-Za-z]:[\\/]|[\\/]|~[\\/]|\.\.?[\\/]|\.\.$|\$env:|\$\{)", token, re.IGNORECASE):
+        return True  # absolute or explicitly relative, even with spaces: `git -C "/d/other repo"`
     if any(char.isspace() for char in token):
         return False  # prose, e.g. a commit message
     if re.match(r"^[A-Za-z]:", token) or token.startswith("~") or token in (".", ".."):
@@ -703,11 +705,6 @@ def _check_command(command: str, shell: str, ctx: Context, cwd: str, depth: int)
         _check_dotnet(command, ctx, cwd)
     segments = parse(command, shell)
     found = _Found()
-    if shell == "bash":  # backticks run their content; tokenizing may split them apart
-        for inner in re.findall(r"`([^`]*)`", _strip_heredocs(command)):
-            if inner.strip():
-                _, inner_found = _check_command(inner, shell, ctx, cwd, depth)
-                found.nested_removal |= bool(inner_found.removal or inner_found.nested_removal)
     for segment in segments:
         cwd = _check_segment(segment, shell, ctx, cwd, depth, found)
     return segments, found
