@@ -5,3 +5,5 @@ disable-model-invocation: true
 ---
 
 Run a `/grilling` session, using the `/domain-modeling` skill.
+
+Once the user confirms the shared understanding, run `/adversarial-review plan`. Do not act on the plan until the review ends.

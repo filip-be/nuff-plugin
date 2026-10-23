@@ -10,3 +10,4 @@ Set of skills that are good enough to improve your AI workflow.
 | grilling | Interview the user relentlessly about a plan, decision, or idea until every branch of the design tree is resolved. The reusable interview primitive behind grill-me. | Yes |
 | domain-modelling | Actively build and sharpen a project's domain model — challenge terms against the glossary, stress-test with edge-case scenarios, and update CONTEXT.md and ADRs inline. | Yes |
 | challenge-domain-model | Challenge existing domain model, CLAUDE.md/AGENTS.md and README files structure | No |
+| adversarial-review | Independent review of a plan or of finished code by a model from a different provider (via GitHub Copilot CLI), looped until no real gaps remain or 3 rounds pass. grill-me runs it on the agreed plan. | Yes |
