@@ -39,6 +39,12 @@ The `agents` field is intentionally different between the two files:
 
 When adding or removing an agent file, update the explicit list in `.claude-plugin/plugin.json`. The Copilot `plugin.json` only needs updating if agents are moved to a new directory.
 
+### Platform-specific plugins (`-cc` / `-copilot`)
+
+Plugins whose name ends in `-cc` (Claude Code) or `-copilot` (GitHub Copilot CLI) work on one platform only, because their hook formats are incompatible. They still carry both definition files and are listed once in the marketplace; their description must start with the platform name ("Claude Code only: ..."). Do not add the other platform's hooks to them.
+
+`nuff-hooks-cc` and `nuff-hooks-copilot` ship identical copies of `plugins/nuff-hooks/core/nuff_hooks_core.py` (`plugins/nuff-hooks/` is shared source, not a plugin). Change the core only there, copy it into both plugins' `hooks/` folders and run `py -3 -m unittest discover -s plugins/nuff-hooks/tests`.
+
 ## Checklist for common operations
 
 ### Adding a new plugin

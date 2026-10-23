@@ -51,6 +51,16 @@ Set of skills that are good enough to improve your AI workflow (fork of [mattpoc
 
 See the [nuff-skills](./plugins/nuff-skills/README.md) README` for full documentation.
 
+### nuff-hooks-cc / nuff-hooks-copilot
+
+Good enough guardrail hooks, one plugin per platform: [nuff-hooks-cc](./plugins/nuff-hooks-cc/README.md) for Claude Code, [nuff-hooks-copilot](./plugins/nuff-hooks-copilot/README.md) for GitHub Copilot CLI. Install only the one matching your agent.
+
+- reads only from `D:\` (plus the agent's home dirs and the temp dir)
+- writes only to the Workspace (plus `D:\.slop-trash`, the agent's home dirs and the temp dir)
+- file removals are rewritten into moves to `D:\.slop-trash`
+
+Requires Windows and the `py` launcher with Python 3.10+.
+
 ## Installation
 
 ### Claude Code (CLI)
