@@ -1,6 +1,6 @@
 # nuff-hooks-cc
 
-Good enough guardrail hooks for **Claude Code only** (the GitHub Copilot CLI flavour is [nuff-hooks-copilot](../nuff-hooks-copilot/README.md)). Terms are defined in the [nuff-hooks glossary](../nuff-hooks/CONTEXT.md).
+Good enough guardrail hooks for **Claude Code only** (the GitHub Copilot CLI flavour is [nuff-hooks-copilot](../nuff-hooks-copilot/README.md)). Terms are defined in the [glossary](../../CONTEXT.md#guardrail-hooks).
 
 ## What it does
 
@@ -23,3 +23,5 @@ Allowed calls get no decision, so your normal permission prompts still apply.
 ## Known gaps
 
 It guards against accidents, not a determined agent: scripts that delete files indirectly (`python cleanup.py`), commands piped into a shell, `git clean` / `git reset --hard`, files written by package managers and `@`-mentioned files are not checked.
+
+A `cd` inside a subshell (`$( … )`, backticks, `( … )`) is treated as if it changed the directory for the rest of the command, so ``cd D:/other && echo `cd D:/work/proj` && touch x`` is checked against the wrong directory.

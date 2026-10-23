@@ -3,7 +3,7 @@
 This file ships unchanged in plugins/nuff-hooks-cc/hooks and plugins/nuff-hooks-copilot/hooks.
 Every copy must stay byte-identical with plugins/nuff-hooks/core (tests/test_sync.py checks it).
 Terms (Workspace, Read Zone, Write Zone, Trash, Removal, Rewrite) are defined in
-plugins/nuff-hooks/CONTEXT.md.
+the "Guardrail hooks" section of the root CONTEXT.md.
 
 Only the Python standard library is used: the hooks start on every tool call.
 """
