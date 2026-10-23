@@ -1,19 +1,10 @@
 # AI Agents Guide
 
-This repository is a plugin marketplace configured for **both Claude Code and GitHub Copilot**. When creating or modifying a plugin, changes must be reflected in multiple files across both platforms.
+This repository is a plugin marketplace configured for **both Claude Code and GitHub Copilot**. When creating or modifying a plugin, changes must be reflected in both platforms' plugin definition files.
 
 ## Marketplace definitions
 
-The marketplace (the list of available plugins) is defined in two places that must stay in sync:
-
-| Platform | File |
-| -------- | ---- |
-| Claude Code | `.claude-plugin/marketplace.json` |
-| GitHub Copilot | `.github/plugin/marketplace.json` |
-
-Each file lists the plugins available in this marketplace. When adding or removing a plugin, update both files.
-
-**Key difference:** the Copilot marketplace includes a top-level `"pluginRoot": "./plugins/"` field and uses bare plugin names as `source` values (e.g., `"nuff"`), while the Claude marketplace uses full relative paths (e.g., `"./plugins/nuff"`).
+The marketplace (the list of available plugins) is defined in a single file, `.claude-plugin/marketplace.json`, read by both Claude Code and GitHub Copilot ([Copilot also looks in `.claude-plugin/`](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-marketplace#creating-a-plugin-marketplace)). Use full relative paths as `source` values (e.g., `"./plugins/nuff"`). Do not add `.github/plugin/marketplace.json`.
 
 ## Plugin definitions
 
@@ -53,7 +44,6 @@ When adding or removing an agent file, update the explicit list in `.claude-plug
 ### Adding a new plugin
 
 - [ ] Add entry to `.claude-plugin/marketplace.json`
-- [ ] Add entry to `.github/plugin/marketplace.json`
 - [ ] Create `plugins/<plugin>/.claude-plugin/plugin.json` with explicit agent file list
 - [ ] Create `plugins/<plugin>/plugin.json` with agent directory list
 
