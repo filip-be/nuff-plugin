@@ -14,6 +14,7 @@ import glob
 import os
 import re
 import shlex
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 
@@ -828,6 +829,16 @@ def trash_path(source: str, ctx: Context) -> str:
     return os.path.join(session_trash(ctx), os.path.splitdrive(source)[1].lstrip("\\/"))
 
 
+def _clear_trash_copy(dest: str) -> None:
+    """A second removal of the same path overwrites the older copy in Trash."""
+    if not in_trash(dest) or not os.path.lexists(dest):
+        return
+    if os.path.isdir(dest) and not os.path.islink(dest):
+        shutil.rmtree(dest)
+    else:
+        os.remove(dest)
+
+
 def _quote_bash(path: str) -> str:
     return "'" + path.replace("\\", "/").replace("'", "'\\''") + "'"
 
@@ -868,18 +879,16 @@ def _rewrite(segment: Segment, shell: str, ctx: Context, cwd: str) -> Decision:
     steps = []
     for source in sources:
         dest = trash_path(source, ctx)
+        _clear_trash_copy(dest)
+        # The rewritten command holds no removal of its own: agents see it and may send it again.
         parent = os.path.dirname(dest)
         if shell == "bash":
-            steps.append(f"mkdir -p {_quote_bash(parent)} && rm -rf -- {_quote_bash(dest)} && mv -f -- {_quote_bash(source)} {_quote_bash(dest)}")
-            continue
-        src, dst = _quote_ps(source), _quote_ps(dest)
-        move = f"Move-Item -LiteralPath {src} -Destination {dst}"
-        if os.path.isdir(source) and os.path.splitdrive(source)[0].lower() != os.path.splitdrive(dest)[0].lower():
-            move = f"Copy-Item -LiteralPath {src} -Destination {dst} -Recurse -Force; Remove-Item -LiteralPath {src} -Recurse -Force"
-        steps.append(
-            f"$null = New-Item -ItemType Directory -Force -Path {_quote_ps(parent)}; "
-            f"if (Test-Path -LiteralPath {dst}) {{ Remove-Item -LiteralPath {dst} -Recurse -Force }}; {move}"
-        )
+            steps.append(f"mkdir -p {_quote_bash(parent)} && mv -f -- {_quote_bash(source)} {_quote_bash(dest)}")
+        else:
+            steps.append(
+                f"$null = New-Item -ItemType Directory -Force -Path {_quote_ps(parent)}; "
+                f"Move-Item -LiteralPath {_quote_ps(source)} -Destination {_quote_ps(dest)}"
+            )
     if shell == "bash":
         command = " && ".join(steps + [f"echo {_quote_bash(message)}"])
     else:

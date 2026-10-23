@@ -233,6 +233,15 @@ class Rewrite(unittest.TestCase):
         self.run_shell(core.check_shell("Remove-Item a.txt", "powershell", self.ctx).command, "powershell")
         self.assertEqual(self.in_trash("a.txt").read_text(), "second")
 
+    def test_replayed_rewrite_is_allowed(self):
+        # Agents see the rewritten command and may send it again themselves.
+        for command, shell in (("rm a.txt", "bash"), ("Remove-Item -Recurse dir", "powershell")):
+            with self.subTest(shell=shell):
+                rewritten = core.check_shell(command, shell, self.ctx)
+                self.assertEqual(rewritten.kind, "rewrite", rewritten.reason)
+                replay = core.check_shell(rewritten.command, shell, self.ctx)
+                self.assertEqual(replay.kind, "allow", replay.reason)
+
     def test_missing_targets_become_noop(self):
         for command, shell in (("rm -f nope.txt", "bash"), ("Remove-Item nope.txt", "powershell")):
             with self.subTest(shell=shell):
