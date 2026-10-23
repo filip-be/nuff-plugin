@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "hooks": {
+        "preToolUse": [
+            {
+                "type": "command",
+                "matcher": "^(view|create|edit|str_replace_editor|apply_patch|grep|rg|glob|bash|powershell|write_bash|write_powershell)$",
+                "powershell": "py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\"",
+                "bash": "py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\"",
+                "timeoutSec": 15
+            }
+        ]
+    }
+}
