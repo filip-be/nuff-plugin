@@ -47,7 +47,9 @@ See the [nuff README](./plugins/nuff/README.md) for full documentation.
 
 ### nuff-skills
 
-Set of skills that are good enough to improve your AI workflow (fork of [mattpocock/skills](https://github.com/mattpocock/skill)).
+Set of skills that are good enough to improve your AI workflow (initially, a fork of [mattpocock/skills](https://github.com/mattpocock/skill)).
+
+Grilling, domain modeling, adversarial review.
 
 See the [nuff-skills](./plugins/nuff-skills/README.md) README` for full documentation.
 
