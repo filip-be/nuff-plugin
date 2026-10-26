@@ -132,6 +132,21 @@ class Shell(unittest.TestCase):
             ("cd D:/other && echo `touch x`", "deny"),
             ('cd D:/other && echo "$(touch x)"', "deny"),
             ("echo `date`", "allow"),
+            ('for d in /d/a /d/b; do echo "== $d"; (cd $d; git log -2; grep -ril x . | head -20); done', "allow"),
+            ("for d in /d/a /c/x; do cat $d/f; done", "deny"),
+            ("for d in /d/a /d/b; do touch $d/f; done", "deny"),
+            ("for d in src lib; do touch $d/f; done", "allow"),
+            ("for d in /d/a /d/b; do cd $d; touch f; done", "deny"),
+            ("for d in src /d/b; do cd $d; touch f; done", "deny"),
+            ("for f in *.py; do wc -l $f > $f.count; done", "allow"),
+            ("for d in src; do d=/c/x; touch $d; done", "deny"),
+            ("for d in src; do read d; touch $d; done", "deny"),
+            ("touch $d; for d in src; do :; done", "deny"),
+            ("for d; do touch $d; done", "deny"),
+            ("if test -f x; then cat C:/x; fi", "deny"),
+            ("if test -f x; then cat x; else cat D:/y; fi", "allow"),
+            ("while true; do touch C:/x; done", "deny"),
+            ("for d in $(ls C:/); do echo $d; done", "deny"),
         ], "bash")
 
     def test_powershell(self):
