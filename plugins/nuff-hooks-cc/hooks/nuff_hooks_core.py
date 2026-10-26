@@ -16,7 +16,7 @@ import re
 import shlex
 import shutil
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 READ_ROOTS = ("D:\\",)
 TRASH = "D:\\.slop-trash"
@@ -40,6 +40,7 @@ class Context:
     cwd: str
     session_id: str
     env: dict = field(default_factory=lambda: dict(os.environ))
+    loop_vars: dict = field(default_factory=dict)  # bash `for NAME in WORDS`: NAME -> WORDS
 
 
 @dataclass
@@ -108,18 +109,42 @@ def _absolute(path: str, cwd: str, shell: str) -> str | None:
     return os.path.normpath(path)
 
 
+def _var_name(match: re.Match) -> str:
+    return next(group for group in match.groups() if group)
+
+
+def _loop_expansions(token: str, ctx: Context) -> list[str]:
+    """`token` once per value of each loop variable it uses."""
+    match = next((m for m in _VAR.finditer(token) if _var_name(m) in ctx.loop_vars), None)
+    if not match:
+        return [token]
+    head, tail = token[: match.start()], token[match.end() :]
+    return [head + value + rest for value in ctx.loop_vars[_var_name(match)] for rest in _loop_expansions(tail, ctx)]
+
+
+def resolve_all(token: str, ctx: Context, cwd: str, shell: str) -> list[str | None]:
+    """Every path a token can stand for: one per loop variable value, else just one."""
+    return [_resolve_one(expanded, token, ctx, cwd, shell) for expanded in _loop_expansions(token, ctx)]
+
+
 def resolve(token: str, ctx: Context, cwd: str, shell: str) -> str | None:
     """Resolve a path token; raises _Deny when it hides a path the hook can't know."""
+    paths = resolve_all(token, ctx, cwd, shell)
+    if len(paths) != 1:
+        raise _Deny(f"cannot check '{token}': it uses a loop variable here")
+    return paths[0]
+
+
+def _resolve_one(token: str, original: str, ctx: Context, cwd: str, shell: str) -> str | None:
     if token.lower() in _NULL_DEVICES:
         return None
     if "$(" in token or "`" in token:
-        raise _Deny(f"cannot check '{token}': it uses command substitution")
+        raise _Deny(f"cannot check '{original}': it uses command substitution")
 
     def expand(match: re.Match) -> str:
-        name = next(group for group in match.groups() if group)
-        value = _env(ctx, name)
+        value = _env(ctx, _var_name(match))
         if value is None:
-            raise _Deny(f"cannot check '{token}': variable '{match.group(0)}' is unknown to the hook")
+            raise _Deny(f"cannot check '{original}': variable '{match.group(0)}' is unknown to the hook")
         return value
 
     path = _VAR.sub(expand, token)
@@ -158,15 +183,15 @@ def in_trash(path: str) -> bool:
 
 
 def _require_read(token: str, ctx: Context, cwd: str, shell: str) -> None:
-    path = resolve(token, ctx, cwd, shell)
-    if path is not None and not in_read_zone(path, ctx):
-        raise _Deny(f"reading '{token}' is not allowed: {READ_ZONE_TEXT}")
+    for path in resolve_all(token, ctx, cwd, shell):
+        if path is not None and not in_read_zone(path, ctx):
+            raise _Deny(f"reading '{token}' is not allowed: {READ_ZONE_TEXT}")
 
 
 def _require_write(token: str, ctx: Context, cwd: str, shell: str) -> None:
-    path = resolve(token, ctx, cwd, shell)
-    if path is not None and not in_write_zone(path, ctx):
-        raise _Deny(f"writing '{token}' is not allowed: {WRITE_ZONE_TEXT}")
+    for path in resolve_all(token, ctx, cwd, shell):
+        if path is not None and not in_write_zone(path, ctx):
+            raise _Deny(f"writing '{token}' is not allowed: {WRITE_ZONE_TEXT}")
 
 
 # --- file tools ------------------------------------------------------------------------
@@ -471,6 +496,7 @@ COPIES = {"cp", "copy", "copy-item", "cpi", "xcopy", "install", "scp", "rsync", 
 MOVES = {"mv", "move", "move-item", "mi"}
 WRAPPERS = {"sudo", "env", "nohup", "time", "command", "builtin", "exec", "nice", "xargs", "timeout"}
 WRAPPER_VALUE_FLAGS = {"-n", "-I", "-P", "-L", "-d", "-s", "-k", "-u", "-E", "--max-args", "--max-procs"}
+BASH_KEYWORDS = {"if", "then", "elif", "else", "fi", "while", "until", "do", "done", "!"}
 
 DEST_FLAGS = {"-destination", "-destinationpath", "-t", "--target-directory"}
 PATH_FLAGS = {"-path", "-literalpath", "-lp", "-pspath", "-filepath"}
@@ -579,7 +605,7 @@ def _strip_prefixes(argv: list[str], shell: str) -> list[str]:
     argv = list(argv)
     while argv:
         head = argv[0]
-        if shell == "bash" and re.match(r"^\w+=", head):
+        if shell == "bash" and (re.match(r"^\w+=", head) or head in BASH_KEYWORDS):
             argv.pop(0)
         elif shell == "powershell" and head.startswith("$") and len(argv) > 1 and re.fullmatch(r"[+\-*/]?=", argv[1]):
             argv = argv[2:]
@@ -705,13 +731,23 @@ def _check_command(command: str, shell: str, ctx: Context, cwd: str, depth: int)
         _check_dotnet(command, ctx, cwd)
     segments = parse(command, shell)
     found = _Found()
+    cwds = [cwd]  # `cd $d` in a loop leaves one working directory per value of $d
     for segment in segments:
-        cwd = _check_segment(segment, shell, ctx, cwd, depth, found)
+        cwds = list(dict.fromkeys(after for before in cwds for after in _check_segment(segment, shell, ctx, before, depth, found)))
     return segments, found
 
 
-def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: int, found: _Found) -> str:
-    """Check one segment; returns the working directory for the segments after it."""
+def _forget_reassigned_loop_vars(segment: Segment, ctx: Context) -> None:
+    """A loop variable that is assigned (`d=x`, `read d`, `${d:=x}`) no longer holds the loop's values."""
+    for name in list(ctx.loop_vars):
+        for token in segment.argv + [target for _, target in segment.redirects]:
+            if token == name or re.match(rf"^{name}(\+?=|\[)", token) or re.search(rf"\$\{{{name}(?!\}})", token):
+                del ctx.loop_vars[name]
+                break
+
+
+def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: int, found: _Found) -> list[str]:
+    """Check one segment; returns the working directories for the segments after it."""
     for token in segment.argv + [target for _, target in segment.redirects]:
         for inner in _substitutions(token):
             _, inner_found = _check_command(inner, shell, ctx, cwd, depth)
@@ -720,8 +756,16 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
     for op, target in segment.redirects:
         (_require_read if op == "<" else _require_write)(target, ctx, cwd, shell)
     argv = _strip_prefixes(segment.argv, shell)
+    if shell == "bash" and argv[:1] == ["for"]:
+        # `for NAME in WORDS`: the words are only values; their uses as `$NAME` are checked.
+        if len(argv) > 2 and re.fullmatch(r"[A-Za-z_]\w*", argv[1]) and argv[2] == "in":
+            ctx.loop_vars[argv[1]] = argv[3:]
+        elif len(argv) > 1:
+            ctx.loop_vars.pop(argv[1], None)  # `for NAME; do`: loops over the script's arguments
+        return [cwd]
+    _forget_reassigned_loop_vars(segment, ctx)
     if not argv:
-        return cwd
+        return [cwd]
     name, args = _name(argv[0]), argv[1:]
 
     if name in EVAL:
@@ -740,12 +784,12 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
             _, inner_found = _check_command(inner, NESTED[name], ctx, inner_cwd, depth + 1)
             if inner_found.removal or inner_found.nested_removal:
                 found.nested_removal = True
-            return cwd
+            return [cwd]
     if name in REMOVALS:
         if found.removal:
             found.nested_removal = True  # two removals: not a standalone one
         found.removal, found.removal_cwd = segment, cwd
-        return cwd
+        return [cwd]
     if name == "robocopy" and any(arg.lower() in ("/mir", "/purge", "/mov", "/move") for arg in args):
         raise _Deny(f"robocopy flags that delete files are not allowed; {REMOVAL_HINT}")
     if name == "find":
@@ -757,27 +801,27 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
     if name in CD:
         targets = parsed.positionals + parsed.paths
         if not targets or targets[0] == "-":
-            return cwd
+            return [cwd]
         _require_read(targets[0], ctx, cwd, shell)
-        return resolve(targets[0], ctx, cwd, shell) or cwd
+        return [path or cwd for path in resolve_all(targets[0], ctx, cwd, shell)]
     if name in NOOP:
-        return cwd
+        return [cwd]
     if name in READERS:
         positionals = parsed.positionals
         if name == "sed" and any(flag.startswith(("-i", "--in-place")) for flag in parsed.flags):
             files = positionals[0 if "-e" in parsed.flags or "--expression" in parsed.flags else 1 :]
             for token in files + parsed.paths:
                 _require_write(token, ctx, cwd, shell)
-            return cwd
+            return [cwd]
         if name in PATTERN_FIRST and not PATTERN_FLAGS & set(parsed.flags):
             positionals = positionals[1:]
         for token in positionals + parsed.paths:
             _require_read(token, ctx, cwd, shell)
-        return cwd
+        return [cwd]
     if name in WRITERS:
         for token in parsed.positionals + parsed.paths + parsed.dests:
             _require_write(token, ctx, cwd, shell)
-        return cwd
+        return [cwd]
     if name in COPIES or name in MOVES or name == "robocopy":
         operands = parsed.positionals + parsed.paths
         dests = parsed.dests
@@ -789,17 +833,17 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
             (_require_write if name in MOVES else _require_read)(token, ctx, cwd, shell)
         for token in dests:
             _require_write(token, ctx, cwd, shell)
-        return cwd
+        return [cwd]
 
     # Unknown command: any path argument could be written to.
     for token in args:
         value = _flag_value(token, shell)[1] if _is_flag(token, shell) else token
         if _path_like(value):
             _require_write(value, ctx, cwd, shell)
-    return cwd
+    return [cwd]
 
 
-def _check_find(args: list[str], ctx: Context, cwd: str, shell: str, found: _Found) -> str:
+def _check_find(args: list[str], ctx: Context, cwd: str, shell: str, found: _Found) -> list[str]:
     i = 0
     while i < len(args) and not args[i].startswith(("-", "(", "!")):
         _require_read(args[i], ctx, cwd, shell)
@@ -811,7 +855,7 @@ def _check_find(args: list[str], ctx: Context, cwd: str, shell: str, found: _Fou
         if token in ("-exec", "-execdir", "-ok", "-okdir") and j + 1 < len(expression):
             if _name(expression[j + 1]) in REMOVALS:
                 raise _Deny(f"`find -exec rm` is not allowed; {REMOVAL_HINT}")
-    return cwd
+    return [cwd]
 
 
 # --- Rewrite ---------------------------------------------------------------------------
@@ -937,6 +981,7 @@ def _rewrite(segment: Segment, shell: str, ctx: Context, cwd: str) -> Decision:
 
 def check_shell(command: str, shell: str, ctx: Context) -> Decision:
     """Check a bash or PowerShell tool command; Removals come back as a Rewrite."""
+    ctx = replace(ctx, loop_vars={})
     try:
         segments, found = _check_command(command, shell, ctx, ctx.cwd, depth=0)
         if found.nested_removal:
