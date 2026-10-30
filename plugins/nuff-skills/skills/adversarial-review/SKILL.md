@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Independent review of a plan or of finished code by a model from a different provider, run through the GitHub Copilot CLI. Use after a grilling or planning session reaches the Vibe check, before acting on the plan (`plan` mode), and when an implementation is complete, before creating a PR or presenting the changes (`code` mode).
+description: Independent review of a plan or of finished code by a model from a different provider, run through the GitHub Copilot CLI. Use `plan` mode once a grilling or planning session is agreed, before acting on the plan. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR.
 ---
 
 # Adversarial review
