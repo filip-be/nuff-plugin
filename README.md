@@ -63,6 +63,12 @@ Good enough guardrail hooks, one plugin per platform: [nuff-hooks-cc](./plugins/
 
 Requires Windows and the `py` launcher with Python 3.10+.
 
+### nuff-cc
+
+Good enough mods for **Claude Code only**. First mod: open the current session's folder in VS Code from an **Open in VS Code** button above the prompt (desktop app) or `/vscode`.
+
+See the [nuff-cc README](./plugins/nuff-cc/README.md) for details.
+
 ## Installation
 
 ### Claude Code (CLI)
