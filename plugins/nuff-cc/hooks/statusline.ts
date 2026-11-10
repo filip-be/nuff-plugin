@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import type { CacheState, ContextFigures } from '../types'
-import { cacheSegment, contextSegment, hasCacheActivity, isFlagSet } from './status'
+import { cacheSegment, contextSegment, costSegment, hasCacheActivity, isFlagSet } from './status'
 import type { Segment } from './status'
 
 // Change a tag when its value's fields change: it declines what an earlier
@@ -13,6 +13,7 @@ const context = atom({ plugin: 'nuff-cc', key: 'context' } as const, null, {
 const cache = atom({ plugin: 'nuff-cc', key: 'cache' } as const, { kind: 'none' }, {
   shape: 'cache-1',
 })
+const cost = atom({ plugin: 'nuff-cc', key: 'cost' } as const, null)
 const isCacheOff = atom({ plugin: 'nuff-cc', key: 'isCacheOff' } as const, false)
 const tick = atom({ plugin: 'nuff-cc', key: 'tick' } as const, 0)
 
@@ -23,9 +24,14 @@ const COLD: CacheState = { kind: 'cold' }
 // (a resumed or forked session shows them at once), reads the cache switch and
 // starts the minute tick. A reload cancels the old timer and runs this again.
 export async function startStatusLine($: EngineInterface): Promise<void> {
-  const figures = toFigures((await $.session.usage()).context)
+  const usage = await $.session.usage()
+  const figures = toFigures(usage.context)
   if (figures !== null) {
     await update($, context, () => figures)
+  }
+  if (usage.cost !== undefined) {
+    const usd = usage.cost.usd
+    await update($, cost, () => usd)
   }
 
   const isOff = isFlagSet(await $.env.get('DISABLE_PROMPT_CACHING'))
@@ -43,6 +49,10 @@ export function registerStatusLine(on: On): void {
   on('session.measure', async ($, e, next) => {
     const figures = toFigures(e.context)
     await update($, context, () => figures)
+    if (e.cost !== undefined) {
+      const usd = e.cost.usd
+      await update($, cost, () => usd)
+    }
 
     return next(e)
   })
@@ -76,6 +86,7 @@ export function registerStatusLine(on: On): void {
     if (e.reason === 'clear') {
       await update($, context, () => null)
       await update($, cache, (): CacheState => ({ kind: 'none' }))
+      await update($, cost, () => null)
     }
 
     return next(e)
@@ -105,7 +116,7 @@ export function registerStatusLine(on: On): void {
   }).catch(($, e, next) => next(e))
 }
 
-/** The band's left side, `173k · ◷ 53m`, or null with nothing to show. Call while drawing. */
+/** The band's left side, `173k · ◷ 53m · $1.23`, or null with nothing to show. Call while drawing. */
 export async function statusSegments($: EngineInterface): Promise<Segment[]> {
   await read($, tick)
 
@@ -113,6 +124,7 @@ export async function statusSegments($: EngineInterface): Promise<Segment[]> {
   const segments = [
     contextSegment(await read($, context)),
     cacheSegment(await read($, cache), await read($, isCacheOff), now),
+    costSegment(await read($, cost)),
   ]
 
   return segments.filter((segment): segment is Segment => segment !== null)

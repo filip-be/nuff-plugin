@@ -77,6 +77,20 @@ export function cacheSegment(
   }
 }
 
+/** `$1.23` for a session cost in US dollars, rounded to the cent. */
+export function formatCost(usd: number): string {
+  return `$${Math.max(0, usd).toFixed(2)}`
+}
+
+/** The cost segment, or null until the session has cost anything. */
+export function costSegment(usd: number | null): Segment | null {
+  if (usd === null || !(usd > 0)) {
+    return null
+  }
+
+  return { text: formatCost(usd) }
+}
+
 /** Whether a step's usage shows prompt-cache activity (a read or a write). */
 export function hasCacheActivity(
   usage: { cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | null,

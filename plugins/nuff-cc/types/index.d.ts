@@ -19,6 +19,8 @@ declare module 'claude-code' {
     'nuff-cc': {
       context: Shaped<ContextFigures | null>
       cache: Shaped<CacheState>
+      /** The session's cost in US dollars, as /cost totals it; null before a figure. */
+      cost: number | null
       /** `DISABLE_PROMPT_CACHING` is set: no countdown. */
       isCacheOff: boolean
       /** The last minute tick, in `$.clock.now()` milliseconds: redraws the band. */
