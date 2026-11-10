@@ -9,21 +9,21 @@ A relentless interview that maps a plan as a design tree and asks the user every
 _Avoid_: Interview, Q&A
 
 **Vibe check**:
-The moment the user confirms that they and the agent have reached a shared understanding and the grilling session can end.
+The moment the user confirms the shared understanding, presented only once the grilling has no open questions left and the Plan review has ended; it ends the grilling session.
 _Avoid_: Sign-off, approval
 
 ## Adversarial review
 
 **Adversarial review**:
-An independent check of the agent's work by a Reviewer from a different model provider, looped until the Reviewer has no Findings left or the round cap is hit.
+An independent check of the agent's work by a Reviewer — from a different model provider when available — looped until the Reviewer has no Findings left or the round cap is hit.
 _Avoid_: Peer review, second opinion
 
 **Reviewer**:
-The independent, read-only model that performs an Adversarial review; it never changes the work itself.
+The independent, read-only model that performs an Adversarial review: a different provider's model via the GitHub Copilot CLI when available, otherwise a subagent of the agent's own host, chosen by the user. It never changes the work itself.
 _Avoid_: Critic, judge, verifier
 
 **Plan review**:
-An Adversarial review of a plan after its Vibe check, looking for decisions that are still missing or contradictory.
+An Adversarial review of a plan as soon as its open questions are settled, before its Vibe check, looking for decisions that are still missing or contradictory.
 _Avoid_: Grilling review
 
 **Code review**:

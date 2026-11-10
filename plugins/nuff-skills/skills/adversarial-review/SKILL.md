@@ -1,13 +1,15 @@
 ---
 name: adversarial-review
-description: Independent review of a plan or of finished code by a model from a different provider, run through the GitHub Copilot CLI. Use `plan` mode once a grilling or planning session is agreed, before acting on the plan. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR.
+description: Independent review of a plan or of finished code. Use `plan` mode as soon as a plan's open questions are settled, before presenting it for approval. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR.
 ---
 
 # Adversarial review
 
-Have the work checked by a Reviewer from a different model provider before the human sees it. The goal is to catch real gaps, not to polish: the result has to be good enough for the human to review with less effort — not perfect.
+Have the work checked by an independent Reviewer — from a different model provider when available — before the human sees it. The goal is to catch real gaps, not to polish: the result has to be good enough for the human to review with less effort — not perfect.
 
-Mode comes from the arguments (`plan` or `code`). If none is given, infer it: a plan that just reached the Vibe check → `plan`; committed implementation about to be presented → `code`.
+Mode comes from the arguments (`plan` or `code`). If none is given, infer it: a plan whose open questions are settled, not yet presented → `plan`; committed implementation about to be presented → `code`.
+
+**Run it unprompted** at both trigger points; the user sees the plan or summary only after the review ends, with its outcome.
 
 ## Terms
 
@@ -28,7 +30,13 @@ Reasoning effort is always `medium`.
 
 ## 2. Check the engine
 
-Run `copilot --version`. If it fails, or any Reviewer call below fails (non-zero exit, auth error, unknown model, empty output, or the host's permission system blocks the command), **stop and ask the user** using the built-in tool for asking questions: show the error and let them choose between fixing it and retrying, or skipping the adversarial review. Never fall back to another reviewer and never skip silently.
+Run `copilot --version`. If it fails, or any Reviewer call below fails (non-zero exit, auth error, unknown model, empty output, or the host's permission system blocks the command), **stop and ask the user** using the built-in tool for asking questions. Show the error and offer three choices:
+
+- **Fix and retry** — the user fixes Copilot CLI, you retry.
+- **Host subagent** — run the Reviewer as a subagent of your own host (see [Host subagent Reviewer](#host-subagent-reviewer)).
+- **Skip** — skip the adversarial review.
+
+Never switch engines and never skip without the user's choice. Once the user picks the host subagent, use it for every later review in this session without checking Copilot or asking again.
 
 ## 3. Write the Review brief
 
@@ -56,9 +64,19 @@ PowerShell: `Get-Content <brief-file> -Raw | copilot <same flags>`.
 
 A run can take several minutes — allow for a long timeout. The Reviewer ends its answer with `VERDICT: CLEAN` or `VERDICT: FINDINGS` followed by numbered Findings.
 
+### Host subagent Reviewer
+
+Used only when the user chose it in step 2.
+
+- **Model** — a strong model at **high** effort, e.g. Claude Opus or GPT Sol. Never the top, most expensive tier (e.g. Claude Fable, GPT Astra).
+- **Prompt** — tell the subagent to read the Review brief file and follow it, working in the workspace root and staying read-only.
+- **Later rounds** — send the follow-up to the same subagent when your host can resume it (Claude Code: `SendMessage` to that agent). Otherwise start a fresh subagent per round with the full brief plus every earlier round's Findings and your responses.
+
+Everything else — brief, rounds, verdict, triage — stays the same.
+
 ## 5. Respond to Findings
 
-`VERDICT: CLEAN` ends the review. Otherwise handle every Finding, then start the next round by writing a follow-up file with your response to each Finding (by number) and running the same command with the same `--session-id`.
+`VERDICT: CLEAN` ends the review. Otherwise handle every Finding, then start the next round by writing a follow-up file with your response to each Finding (by number) and running the same command with the same `--session-id` (or the same subagent, as above).
 
 ### `plan` mode
 
@@ -66,7 +84,7 @@ Triage each Finding before involving the user:
 
 - **Already settled** in the session → drop it; tell the Reviewer where it was settled.
 - **A fact** you can look up (code, files, tools) → find it yourself and pass the answer on.
-- **A real decision** → take it back to the user as the next grilling round. When grilling reaches a new Vibe check, pass the user's decisions to the Reviewer.
+- **A real decision** → take it back to the user as the next grilling round. When that round leaves no open questions, pass the user's decisions to the Reviewer as the next review round.
 
 Tell the user briefly which Findings you dropped or answered yourself, and why.
 
@@ -78,9 +96,9 @@ For each Finding either **fix it** (and commit) or **reject it** with a concrete
 
 After `VERDICT: CLEAN` or after round 3, report to the user in chat:
 
-- Reviewer model and number of rounds.
+- Reviewer engine (Copilot CLI or host subagent), model and number of rounds.
 - What was fixed or decided because of the review.
 - Findings you rejected and the Reviewer accepted.
 - **Open** — anything unresolved after round 3, with both sides' positions, for the user to decide.
 
-In `plan` mode, do not act on the plan while open Findings remain unless the user says so.
+In `plan` mode, this report goes with the plan you present for approval. Do not act on the plan while open Findings remain unless the user says so.

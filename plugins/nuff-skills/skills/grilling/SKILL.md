@@ -11,4 +11,6 @@ Each round the user answers reshapes the design tree — settled decisions push 
 
 Finding _facts_ is your job, never the user's. When a frontier question needs a fact from the environment (filesystem, tools, etc.), dispatch a sub-agent to find it — don't ask the user for anything you could look up yourself. Don't block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait for the sub-agent to report — ask the rest of the frontier now. The _decisions_ are the user's — put each to them and wait.
 
-The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
+When the frontier is empty — every branch of the design tree visited, nothing left silently assumed — run `/adversarial-review plan` right away, without asking. Findings that need the user's decision come back as the next round; when the frontier is empty again, the review continues with those decisions.
+
+The session is done only when the frontier is empty and the review has ended. Only then present the shared understanding, with the review's outcome, and do not act on it until the user confirms it.
