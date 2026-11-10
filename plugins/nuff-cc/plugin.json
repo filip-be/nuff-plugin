@@ -1,6 +1,6 @@
 {
     "name": "nuff-cc",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "description": "Claude Code only: good enough Claude Code mods - a desktop status line (context size, prompt-cache countdown, session cost) and opening the session's folder in VS Code from a button above the prompt or /vscode.",
     "author": {
         "name": "filip-be"

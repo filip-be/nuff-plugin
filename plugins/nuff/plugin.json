@@ -1,6 +1,6 @@
 {
     "name": "nuff",
-    "version": "1.12.0",
+    "version": "1.12.1",
     "description": "Take Azure DevOps work item as an input and do enough work to get it done.",
     "homepage": "https://github.com/filip-be/nuff-plugin",
     "repository": "https://github.com/filip-be/nuff-plugin",
