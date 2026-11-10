@@ -38,11 +38,11 @@ export async function startStatusLine($: EngineInterface): Promise<void> {
 
 // The status line's hooks: they keep the figures the band draws in $.state.
 export function registerStatusLine(on: On): void {
+  // `tokens` is absent until the live window's first response (a fresh session,
+  // or one just compacted): the segment hides until it comes.
   on('session.measure', async ($, e, next) => {
     const figures = toFigures(e.context)
-    if (figures !== null) {
-      await update($, context, () => figures)
-    }
+    await update($, context, () => figures)
 
     return next(e)
   })
@@ -81,13 +81,15 @@ export function registerStatusLine(on: On): void {
     return next(e)
   })
 
-  // A compaction rewrites the prefix, so the old cache is useless. A precompute
-  // installs nothing, and a subagent's compaction is not the main conversation's.
+  // A compaction rewrites the prefix, so the old cache is useless and the old
+  // context size is gone until the next response. A precompute installs
+  // nothing, and a subagent's compaction is not the main conversation's.
   on('session.compact', async ($, e, next) => {
     const result = await next(e)
 
     if (e.agentId === undefined && e.trigger !== 'precompute' && !('skip' in result && result.skip !== undefined)) {
       await update($, cache, () => COLD)
+      await update($, context, () => null)
     }
 
     return result

@@ -45,13 +45,13 @@ How the figures move:
 - **Cache countdown** — restarts at 60 minutes whenever a main-thread model request reads or writes the prompt cache. Subagent requests are ignored: they cache a different prefix. While a turn runs, the last countdown stays. The line redraws once a minute.
 - **Resume / fork** — the countdown starts from the resumed transcript's last response; `cold` when Claude Code says the cache has likely expired.
 - **`/clear`** — both segments hide until new figures arrive.
-- **`/compact`** — `cold` until the next request that caches.
+- **`/compact`** (or an auto-compact) — the context size hides until the next response; the cache is `cold` until the next request that caches.
 - **Model switch** — `cold` (the new model has no cache of this conversation); restoring the model on resume does not count.
 
 Limitations:
 
 - The TTL is **hardcoded to 60 minutes**, not detected. It is 5 minutes with an API key, Bedrock, Vertex or Foundry, once a subscription draws on usage credits, or with `FORCE_PROMPT_CACHING_5M`; Enterprise is unverified. In those cases the countdown is too optimistic (a resume still turns `cold` correctly, since it uses Claude Code's own TTL).
-- Claude Code reports the real `cache_ttl` only when the model is switched, so the mod cannot learn it up front.
+- The plugin API reports the real `cache_ttl` only when the model is switched, so the mod cannot learn it up front (the terminal `statusLine` payload does carry it).
 - Rewind is not handled: the countdown keeps running from the last request.
 
 ## Prerequisites

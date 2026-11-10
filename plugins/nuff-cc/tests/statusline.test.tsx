@@ -232,8 +232,8 @@ test('/clear hides both segments until new figures arrive', async ($, on) => {
   expect(await line($)).toBe('20k · ◷ 60m')
 })
 
-test('/compact makes the cache cold until the next cached step', async ($, on) => {
-  const { clock } = engine(on)
+test('/compact hides the context and makes the cache cold until the next response', async ($, on) => {
+  const { clock } = engine(on, { tokens: 450_000 })
   await start($)
   await step($)
   await $.session.compact({
@@ -243,9 +243,14 @@ test('/compact makes the cache cold until the next cached step', async ($, on) =
 
   expect(await line($)).toBe('cold')
 
+  // The first measure after a compaction has no tokens yet.
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [], changed: ['context'] })
+  expect(await line($)).toBe('cold')
+
   await clock.advance(MIN)
+  await measure($, 30_000)
   await step($)
-  expect(await line($)).toBe('◷ 60m')
+  expect(await line($)).toBe('30k · ◷ 60m')
 })
 
 test('a model switch makes the cache cold; a resume restore does not', async ($, on) => {
