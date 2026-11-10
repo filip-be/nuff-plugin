@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Independent review of a plan or of finished code by a Reviewer model — from a different provider via the GitHub Copilot CLI when available, otherwise a host subagent. Use `plan` mode as soon as a plan's open questions are settled, before presenting it for approval. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR. Run it unprompted; never offer it as an option.
+description: Independent review of a plan or of finished code. Use `plan` mode as soon as a plan's open questions are settled, before presenting it for approval. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR. Run it unprompted; never offer it as an option.
 ---
 
 # Adversarial review
