@@ -13,4 +13,4 @@ Finding _facts_ is your job, never the user's. When a frontier question needs a 
 
 When the frontier is empty — every branch of the design tree visited, nothing left silently assumed — run `/adversarial-review plan` right away, without asking. Findings that need the user's decision come back as the next round; when the frontier is empty again, the review continues with those decisions.
 
-The session is done only when the frontier is empty and the review has ended. Only then present the shared understanding, with the review's outcome, and do not act on it until the user confirms it (the Vibe check).
+The session is done only when the frontier is empty and the review has ended. Only then present the shared understanding, with the review's outcome, and do not act on it until the user confirms it.
