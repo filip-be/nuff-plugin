@@ -2,8 +2,8 @@
 
 This file ships unchanged in plugins/nuff-hooks-cc/hooks and plugins/nuff-hooks-copilot/hooks.
 Every copy must stay byte-identical with plugins/nuff-hooks/core (tests/test_sync.py checks it).
-Terms (Workspace, Read Zone, Write Zone, Trash, Removal, Rewrite) are defined in
-the "Guardrail hooks" section of the root CONTEXT.md.
+Terms (Workspace, Read Roots, Read Zone, Write Zone, Trash, Removal, Rewrite) are defined
+in the README.md of the plugin this file ships in.
 
 Only the Python standard library is used: the hooks start on every tool call.
 """
@@ -11,6 +11,7 @@ Only the Python standard library is used: the hooks start on every tool call.
 from __future__ import annotations
 
 import glob
+import json
 import os
 import re
 import shlex
@@ -21,9 +22,9 @@ from dataclasses import dataclass, field, replace
 READ_ROOTS = ("D:\\",)
 TRASH = "D:\\.slop-trash"
 AGENT_DIRS = (".claude", ".claude.json", ".copilot")  # relative to the user's home
+CONFIG_FILE = ".nuff-hooks.json"  # relative to the user's home; outside the Write Zone on purpose
 
 PREFIX = "nuff-hooks: "
-READ_ZONE_TEXT = "the Read Zone is D:\\, the agent's home dirs and the temp dir"
 WRITE_ZONE_TEXT = "the Write Zone is the Workspace, D:\\.slop-trash, the agent's home dirs and the temp dir"
 REMOVAL_HINT = (
     "removals are moved to D:\\.slop-trash, but only a plain, standalone removal can be rewritten. "
@@ -41,6 +42,7 @@ class Context:
     session_id: str
     env: dict = field(default_factory=lambda: dict(os.environ))
     loop_vars: dict = field(default_factory=dict)  # bash `for NAME in WORDS`: NAME -> WORDS
+    read_roots: tuple | None = None  # (configured Read Roots, config error), loaded once by read_roots()
 
 
 @dataclass
@@ -170,8 +172,50 @@ def _agent_and_temp(ctx: Context) -> list[str]:
     return dirs
 
 
+def config_path(ctx: Context) -> str:
+    return os.path.join(_home(ctx), CONFIG_FILE)
+
+
+def _load_read_roots(ctx: Context) -> tuple[list[str], str]:
+    """(Read Roots from the config file, error text). Any problem drops every configured root."""
+    path = config_path(ctx)
+    try:
+        with open(path, encoding="utf-8-sig") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        return [], ""
+    except (OSError, ValueError) as error:
+        return [], f"{path} could not be read ({error}), so its readRoots are ignored"
+    roots = data.get("readRoots", []) if isinstance(data, dict) else None
+    if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots):
+        return [], f"readRoots in {path} must be a list of path strings, so it is ignored"
+    resolved = []
+    for root in roots:
+        expanded = _home(ctx) + root[1:] if root == "~" or root.startswith(("~/", "~\\")) else root
+        if not re.match(r"^[A-Za-z]:[\\/]", expanded):
+            return [], f"readRoots entry '{root}' in {path} is not an absolute path like C:\\DEV, so readRoots is ignored"
+        resolved.append(os.path.normpath(expanded))
+    return resolved, ""
+
+
+def read_roots(ctx: Context) -> list[str]:
+    """Extra Read Zone roots configured by the user in ~/.nuff-hooks.json (`readRoots`)."""
+    if ctx.read_roots is None:
+        ctx.read_roots = _load_read_roots(ctx)
+    return ctx.read_roots[0]
+
+
+def _read_zone_text(ctx: Context) -> str:
+    roots = read_roots(ctx)
+    text = "the Read Zone is the Workspace, D:\\, " + "".join(f"{root}, " for root in roots)
+    text += "the agent's home dirs and the temp dir"
+    error = ctx.read_roots[1]
+    return f"{text}; {error}" if error else f"{text}; more roots can be added to readRoots in {config_path(ctx)}"
+
+
 def in_read_zone(path: str, ctx: Context) -> bool:
-    return any(_under(path, root) for root in (*READ_ROOTS, *_agent_and_temp(ctx)))
+    roots = (ctx.workspace, *READ_ROOTS, *read_roots(ctx), *_agent_and_temp(ctx))
+    return any(_under(path, root) for root in roots)
 
 
 def in_write_zone(path: str, ctx: Context) -> bool:
@@ -185,7 +229,7 @@ def in_trash(path: str) -> bool:
 def _require_read(token: str, ctx: Context, cwd: str, shell: str) -> None:
     for path in resolve_all(token, ctx, cwd, shell):
         if path is not None and not in_read_zone(path, ctx):
-            raise _Deny(f"reading '{token}' is not allowed: {READ_ZONE_TEXT}")
+            raise _Deny(f"reading '{token}' is not allowed: {_read_zone_text(ctx)}")
 
 
 def _require_write(token: str, ctx: Context, cwd: str, shell: str) -> None:
@@ -519,6 +563,7 @@ BASH_VALUE_FLAGS = {
     "awk": {"-f", "-v", "-F"},
 }
 FILE_VALUE_FLAGS = {"-f", "--file"}  # for the BASH_VALUE_FLAGS commands: the value is a file that is read
+_COUNT = re.compile(r"[-+]\d+")  # a line count such as `head -5` / `tail +5`, not a file to read
 
 
 def _name(token: str) -> str:
@@ -815,6 +860,7 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
             return [cwd]
         if name in PATTERN_FIRST and not PATTERN_FLAGS & set(parsed.flags):
             positionals = positionals[1:]
+        positionals = [token for token in positionals if not _COUNT.fullmatch(token)]  # `tail -5`, `tail +5`
         for token in positionals + parsed.paths:
             _require_read(token, ctx, cwd, shell)
         return [cwd]

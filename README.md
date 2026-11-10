@@ -57,7 +57,7 @@ See the [nuff-skills](./plugins/nuff-skills/README.md) README` for full document
 
 Good enough guardrail hooks, one plugin per platform: [nuff-hooks-cc](./plugins/nuff-hooks-cc/README.md) for Claude Code, [nuff-hooks-copilot](./plugins/nuff-hooks-copilot/README.md) for GitHub Copilot CLI. Install only the one matching your agent.
 
-- reads only from `D:\` (plus the agent's home dirs and the temp dir)
+- reads only from the Workspace, `D:\` and the roots you list in `~/.nuff-hooks.json` (plus the agent's home dirs and the temp dir)
 - writes only to the Workspace (plus `D:\.slop-trash`, the agent's home dirs and the temp dir)
 - file removals are rewritten into moves to `D:\.slop-trash`
 
