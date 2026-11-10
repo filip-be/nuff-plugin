@@ -47,6 +47,15 @@ Plugins whose name ends in `-cc` (Claude Code) or `-copilot` (GitHub Copilot CLI
 
 `nuff-hooks-cc` and `nuff-hooks-copilot` ship identical copies of `plugins/nuff-hooks/core/nuff_hooks_core.py` (`plugins/nuff-hooks/` is shared source, not a plugin). Change the core only there, copy it into both plugins' `hooks/` folders and run `py -3 -m unittest discover -s plugins/nuff-hooks/tests`.
 
+## Plugins are self-contained
+
+Only the `plugins/<plugin>/` folder is shipped. Every file in it, READMEs included, must not reference any concept, term or file outside that plugin: not this repo's `CONTEXT.md`, `docs/adr/`, `AGENTS.md` or root README, and not another plugin. Every term a plugin file relies on must be defined or explained inside that plugin.
+
+Allowed:
+
+- Mentions of `CONTEXT.md`, ADRs or `AGENTS.md` that mean the *user's* project files.
+- Maintainer notes in source files about how they are kept in sync with repo source, such as the shared-core note in `nuff_hooks_core.py`.
+
 ## Checklist for common operations
 
 ### Adding a new plugin

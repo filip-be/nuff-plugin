@@ -1,6 +1,18 @@
 # nuff-hooks-copilot
 
-Good enough guardrail hooks for **GitHub Copilot CLI only** (the Claude Code flavour is [nuff-hooks-cc](../nuff-hooks-cc/README.md)). Terms are defined in the [glossary](../../CONTEXT.md#guardrail-hooks).
+Good enough guardrail hooks for **GitHub Copilot CLI only**: they use the Copilot CLI hook format and do not run in other agents.
+
+## Terms
+
+- **Workspace** — the project directory the agent session started in (`COPILOT_PROJECT_DIR`, else the working directory), and everything below it. For a session in a git worktree, that is the worktree root.
+- **Agent Dirs** — the agent's own home configuration: `~/.claude`, `~/.claude.json` and `~/.copilot`.
+- **Temp** — the OS temp directory (`TEMP` / `TMP`), including the agent's scratchpad inside it.
+- **Read Roots** — extra directories you let the agent read, listed in `~/.nuff-hooks.json` (see [Read Roots](#read-roots)).
+- **Read Zone** — everywhere the agent may read: the Workspace, the `D:\` drive, Read Roots, Agent Dirs and Temp.
+- **Write Zone** — everywhere the agent may write: the Workspace, Trash, Agent Dirs and Temp.
+- **Trash** — the folder `D:\.slop-trash`, where removed files are kept instead of being deleted.
+- **Removal** — a shell delete command (`rm`, `rmdir`, `unlink`, `shred`, `del`, `erase`, `rd`, `Remove-Item` and its aliases) aimed at files or directories. Git commands and overwriting moves are not Removals.
+- **Rewrite** — replacing a Removal, before it runs, with a move of the same targets into Trash.
 
 ## What it does
 
@@ -18,7 +30,7 @@ Allowed calls get no decision, so your normal permission prompts still apply.
 
 ## Read Roots
 
-To let the agent read outside `D:\` (say your projects live in `C:\DEV`), list extra directories in `~/.nuff-hooks.json` (`%USERPROFILE%\.nuff-hooks.json`). The same file is used by [nuff-hooks-cc](../nuff-hooks-cc/README.md) and [nuff-hooks-copilot](../nuff-hooks-copilot/README.md):
+To let the agent read outside `D:\` (say your projects live in `C:\DEV`), list extra directories in `~/.nuff-hooks.json` (`%USERPROFILE%\.nuff-hooks.json`):
 
 ```json
 {
