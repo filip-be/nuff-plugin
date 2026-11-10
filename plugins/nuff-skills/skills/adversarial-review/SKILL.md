@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Independent review of a plan or of finished code. Use `plan` mode as soon as a plan's open questions are settled, before presenting it for approval. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR. Run it unprompted; never offer it as an option.
+description: Independent review of a plan or of finished code. Use `plan` mode as soon as a plan's open questions are settled, before presenting it for approval. Use `code` mode every time an implementation is finished, before reporting it as done or creating a PR.
 ---
 
 # Adversarial review
@@ -9,7 +9,7 @@ Have the work checked by an independent Reviewer — from a different model prov
 
 Mode comes from the arguments (`plan` or `code`). If none is given, infer it: a plan whose open questions are settled, not yet presented → `plan`; committed implementation about to be presented → `code`.
 
-**Run it unprompted** at both trigger points. Never offer the review to the user as an option or ask whether to run it. The user sees the plan or the implementation summary only after the review ends, together with its outcome.
+**Run it unprompted** at both trigger points; the user sees the plan or summary only after the review ends, with its outcome.
 
 ## Terms
 
