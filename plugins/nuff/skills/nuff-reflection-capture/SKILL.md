@@ -1,6 +1,6 @@
 ---
 name: nuff-reflection-capture
-description: "Capture a subagent or verifier `### Reflections:` section into .nuff/<item-name>/REFLECTIONS.md. Use when refine, plan, or code receives reflections that should be preserved for the improve phase."
+description: "Capture a subagent or verifier `### Reflections:` section into .nuff/{item-name}/REFLECTIONS.md. Use when refine, plan, or code receives reflections that should be preserved for the improve phase."
 ---
 
 # Nuff Reflection Capture
