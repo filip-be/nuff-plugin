@@ -6,6 +6,8 @@ This repository is a plugin marketplace configured for **both Claude Code and Gi
 
 The marketplace (the list of available plugins) is defined in a single file, `.claude-plugin/marketplace.json`, read by both Claude Code and GitHub Copilot ([Copilot also looks in `.claude-plugin/`](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-marketplace#creating-a-plugin-marketplace)). Use full relative paths as `source` values (e.g., `"./plugins/nuff"`). Do not add `.github/plugin/marketplace.json`.
 
+**Bump `metadata.version` in `.claude-plugin/marketplace.json` with every change to a plugin:** patch for changes inside existing plugins, minor when a plugin is added or removed.
+
 ## Plugin definitions
 
 Each plugin has two definition files that must have matching metadata (`name`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`):
@@ -52,6 +54,12 @@ Plugins whose name ends in `-cc` (Claude Code) or `-copilot` (GitHub Copilot CLI
 - [ ] Add entry to `.claude-plugin/marketplace.json`
 - [ ] Create `plugins/<plugin>/.claude-plugin/plugin.json` with explicit agent file list
 - [ ] Create `plugins/<plugin>/plugin.json` with agent directory list
+- [ ] Bump the minor `metadata.version` in `.claude-plugin/marketplace.json`
+
+### Changing an existing plugin (skills, agents, hooks, commands)
+
+- [ ] Bump the patch `version` in both `plugins/<plugin>/.claude-plugin/plugin.json` and `plugins/<plugin>/plugin.json`
+- [ ] Bump the patch `metadata.version` in `.claude-plugin/marketplace.json`
 
 ### Adding a new agent to an existing plugin
 
@@ -62,6 +70,7 @@ Plugins whose name ends in `-cc` (Claude Code) or `-copilot` (GitHub Copilot CLI
 
 - [ ] Update `plugins/<plugin>/.claude-plugin/plugin.json`
 - [ ] Update `plugins/<plugin>/plugin.json` — must match
+- [ ] Bump the patch `metadata.version` in `.claude-plugin/marketplace.json`
 
 ## Tools reference — canonical sources
 
