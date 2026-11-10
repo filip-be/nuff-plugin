@@ -2,7 +2,7 @@
   "name": "nuff-plugin",
   "metadata": {
     "description": "Nuff plugin marketplace",
-    "version": "1.2.3"
+    "version": "1.2.4"
   },
   "owner": {
     "name": "filip-be"
@@ -21,12 +21,12 @@
     {
       "name": "nuff-hooks-cc",
       "source": "./plugins/nuff-hooks-cc",
-      "description": "Claude Code only: good enough guardrail hooks - read only from D:\\, write only to the Workspace, move removed files to D:\\.slop-trash."
+      "description": "Claude Code only: good enough guardrail hooks - read only from the Workspace, D:\\ and configured roots, write only to the Workspace, move removed files to D:\\.slop-trash."
     },
     {
       "name": "nuff-hooks-copilot",
       "source": "./plugins/nuff-hooks-copilot",
-      "description": "GitHub Copilot CLI only: good enough guardrail hooks - read only from D:\\, write only to the Workspace, move removed files to D:\\.slop-trash."
+      "description": "GitHub Copilot CLI only: good enough guardrail hooks - read only from the Workspace, D:\\ and configured roots, write only to the Workspace, move removed files to D:\\.slop-trash."
     },
     {
       "name": "nuff-cc",

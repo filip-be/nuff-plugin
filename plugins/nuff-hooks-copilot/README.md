@@ -8,13 +8,27 @@ A `preToolUse` hook on `view`, `create`, `edit`, `apply_patch`, `grep`, `rg`, `g
 
 | Rule | Behaviour |
 | ---- | --------- |
-| Read Zone | Reads only from `D:\`, the agent's home dirs (`~/.claude`, `~/.copilot`) and the temp dir |
+| Read Zone | Reads only from the Workspace, `D:\`, the [Read Roots](#read-roots) you configure, the agent's home dirs (`~/.claude`, `~/.copilot`) and the temp dir |
 | Write Zone | Writes only to the Workspace (`COPILOT_PROJECT_DIR`), `D:\.slop-trash`, the agent's home dirs and the temp dir |
 | Removal | A standalone `rm` / `Remove-Item` / `del` ... is rewritten into a move to `D:\.slop-trash\<workspace>\<session>\<original path>`; other removals are denied with a hint |
 | Evasion | `iex`/`eval`, encoded commands, unresolvable variables, UNC paths and nested shells deeper than one level are denied |
 | Failure | Any internal error denies the call |
 
 Allowed calls get no decision, so your normal permission prompts still apply.
+
+## Read Roots
+
+To let the agent read outside `D:\` (say your projects live in `C:\DEV`), list extra directories in `~/.nuff-hooks.json` (`%USERPROFILE%\.nuff-hooks.json`). The same file is used by [nuff-hooks-cc](../nuff-hooks-cc/README.md) and [nuff-hooks-copilot](../nuff-hooks-copilot/README.md):
+
+```json
+{
+    "readRoots": ["C:\\DEV", "~/src"]
+}
+```
+
+- Entries must be absolute paths (`C:\DEV`, `C:/DEV`) or start with `~`; each root covers everything below it. They only widen the Read Zone, never the Write Zone.
+- The file is read on every tool call, so changes apply at once. It lives outside the Write Zone on purpose: the agent can't edit it.
+- If the file is not valid JSON or any entry is not an absolute path, every configured root is ignored and denied reads say why.
 
 ## Prerequisites
 

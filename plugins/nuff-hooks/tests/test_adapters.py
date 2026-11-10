@@ -7,6 +7,7 @@ from unittest import mock
 
 PLUGINS = Path(__file__).resolve().parents[2]
 WORKSPACE = "D:\\work\\proj"
+NO_HOME = "C:\\nuff-hooks-test-home"  # has no .nuff-hooks.json, so the user's real one can't change the results
 
 
 def load(path: Path):
@@ -23,7 +24,7 @@ cc = load(PLUGINS / "nuff-hooks-cc" / "hooks" / "nuff_hooks_cc.py")
 class Copilot(unittest.TestCase):
     def decide(self, tool, args):
         event = {"sessionId": "s1", "cwd": WORKSPACE, "toolName": tool, "toolArgs": args}
-        with mock.patch.dict("os.environ", {"COPILOT_PROJECT_DIR": WORKSPACE}):
+        with mock.patch.dict("os.environ", {"COPILOT_PROJECT_DIR": WORKSPACE, "USERPROFILE": NO_HOME}):
             return copilot.decide(event, args).kind
 
     def test_search_roots(self):
@@ -42,7 +43,7 @@ class Copilot(unittest.TestCase):
 class ClaudeCode(unittest.TestCase):
     def decide(self, tool, args):
         event = {"session_id": "s1", "cwd": WORKSPACE, "tool_name": tool, "tool_input": args}
-        with mock.patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": WORKSPACE}):
+        with mock.patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": WORKSPACE, "USERPROFILE": NO_HOME}):
             return cc.decide(event).kind
 
     def test_tools(self):

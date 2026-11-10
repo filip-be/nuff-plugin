@@ -1,7 +1,7 @@
 {
     "name": "nuff-hooks-cc",
-    "version": "1.0.1",
-    "description": "Claude Code only: good enough guardrail hooks - read only from D:\\, write only to the Workspace, move removed files to D:\\.slop-trash.",
+    "version": "1.0.2",
+    "description": "Claude Code only: good enough guardrail hooks - read only from the Workspace, D:\\ and configured roots, write only to the Workspace, move removed files to D:\\.slop-trash.",
     "author": {
         "name": "filip-be"
     },

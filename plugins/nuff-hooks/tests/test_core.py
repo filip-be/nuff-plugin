@@ -198,6 +198,71 @@ class Shell(unittest.TestCase):
         ], "powershell")
 
 
+class ReadRoots(unittest.TestCase):
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home)
+
+    def ctx(self, config=None, workspace=WORKSPACE, cwd=None):
+        if config is not None:
+            Path(self.home, ".nuff-hooks.json").write_text(config, encoding="utf-8")
+        env = {"USERPROFILE": self.home, "TEMP": TEMP, "TMP": TEMP}
+        return core.Context(workspace=workspace, cwd=cwd or workspace, session_id="s", env=env)
+
+    def test_no_config(self):
+        decision = core.check_read("C:\\DEV\\proj\\a.py", self.ctx())
+        self.assertEqual(decision.kind, "deny")
+        self.assertIn(os.path.join(self.home, ".nuff-hooks.json"), decision.reason)
+
+    def test_configured_roots(self):
+        context = lambda: self.ctx('{"readRoots": ["C:\\\\DEV", "E:/src/", "~\\\\code"]}')
+        self.assertEqual(core.read_roots(context()), ["C:\\DEV", "E:\\src", os.path.join(self.home, "code")])
+        cases = {
+            "C:\\DEV\\proj\\a.py": "allow",
+            "C:\\DEV": "allow",
+            "c:\\dev\\x": "allow",
+            "C:\\DEVX\\a.py": "deny",
+            "C:\\DEV\\..\\Windows\\win.ini": "deny",
+            "E:\\src\\a": "allow",
+            "C:\\Windows\\win.ini": "deny",
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(core.check_read(path, context()).kind, expected)
+        self.assertEqual(core.check_write("C:\\DEV\\x", context()).kind, "deny")
+        self.assertEqual(core.check_shell("cat /c/DEV/x && cd C:/DEV/r && grep -rn foo .", "bash", context()).kind, "allow")
+        self.assertEqual(core.check_shell("Get-Content C:\\DEV\\x", "powershell", context()).kind, "allow")
+        denied = core.check_shell("cat C:/Windows/win.ini", "bash", context())
+        self.assertIn("C:\\DEV, E:\\src", denied.reason)
+
+    def test_invalid_config_drops_all_roots(self):
+        for config, message in [
+            ("{not json", "could not be read"),
+            ('{"readRoots": "C:\\\\DEV"}', "must be a list"),
+            ('{"readRoots": ["C:\\\\DEV", "DEV"]}', "not an absolute path"),
+            ('{"readRoots": ["\\\\\\\\server\\\\share"]}', "not an absolute path"),
+        ]:
+            with self.subTest(config=config):
+                decision = core.check_read("C:\\DEV\\a.py", self.ctx(config))
+                self.assertEqual(decision.kind, "deny")
+                self.assertIn(message, decision.reason)
+
+    def test_workspace_is_readable(self):
+        workspace = "C:\\DEV\\proj"
+        self.assertEqual(core.check_read(workspace + "\\.gitignore", self.ctx(workspace=workspace)).kind, "allow")
+        self.assertEqual(core.check_shell("cat .gitignore", "bash", self.ctx(workspace=workspace)).kind, "allow")
+        self.assertEqual(core.check_read("C:\\DEV\\other\\x", self.ctx(workspace=workspace)).kind, "deny")
+
+    def test_line_counts_are_not_paths(self):
+        context = lambda: self.ctx(workspace="C:\\DEV\\proj", cwd="C:\\elsewhere")
+        for command in ["git show HEAD | tail -5", "head -20 /d/x", "tail +5 /d/x", "git log | head -n 5"]:
+            with self.subTest(command=command):
+                decision = core.check_shell(command, "bash", context())
+                self.assertEqual(decision.kind, "allow", decision.reason)
+        self.assertEqual(core.check_shell("tail -5 secret.txt", "bash", context()).kind, "deny")
+        self.assertEqual(core.check_shell("touch -5", "bash", context()).kind, "deny")
+
+
 class Rewrite(unittest.TestCase):
     def setUp(self):
         self.workspace = Path(tempfile.mkdtemp(prefix="nuff-ws-"))
