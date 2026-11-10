@@ -24,7 +24,7 @@ Neither trigger starts a model turn.
 The **Open in VS Code** band in the Claude desktop app doubles as a status line: the figures on the left, the button on the right.
 
 ```
-173k · ◷ 53m                                   [Open in VS Code]
+173k · ◷ 53m · $1.23                           [Open in VS Code]
 ```
 
 Desktop app only, hidden while a survey shows. The terminal has its own `statusLine`; the VS Code extension shows the cache itself.
@@ -36,16 +36,18 @@ Desktop app only, hidden while a survey shows. The terminal has its own `statusL
 | `◷ <1m` | under a minute left | `warning` |
 | `cold` | the cache has expired or was invalidated | `error` |
 | `cache off` | `DISABLE_PROMPT_CACHING` is set | dim |
+| `$1.23` | what the session has cost so far in US dollars, as `/cost` and the terminal `statusLine` (`cost.total_cost_usd`) total it, to the cent | default |
 
-Each segment is hidden until it has a figure; ` · ` separates them only when both show.
+Each segment is hidden until it has a figure; ` · ` separates the ones that show.
 
 How the figures move:
 
 - **Context** — seeded at session start (so a resumed or forked session shows it at once), then updated after every main-thread turn.
 - **Cache countdown** — restarts at 60 minutes whenever a main-thread model request reads or writes the prompt cache. Subagent requests are ignored: they cache a different prefix. While a turn runs, the last countdown stays. The line redraws once a minute.
 - **Resume / fork** — the countdown starts from the resumed transcript's last response; `cold` when Claude Code says the cache has likely expired.
-- **`/clear`** — both segments hide until new figures arrive.
-- **`/compact`** (or an auto-compact) — the context size hides until the next response; the cache is `cold` until the next request that caches.
+- **Cost** — seeded at session start, then updated whenever Claude Code's cost total grows (subagent requests included, as in `/cost`). Hidden while it is $0.
+- **`/clear`** — all segments hide until new figures arrive.
+- **`/compact`** (or an auto-compact) — the context size hides until the next response; the cache is `cold` until the next request that caches; the cost stays.
 - **Model switch** — `cold` (the new model has no cache of this conversation); restoring the model on resume does not count.
 
 Limitations:

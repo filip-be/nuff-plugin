@@ -5,6 +5,8 @@ import {
   cacheSegment,
   contextColor,
   contextSegment,
+  costSegment,
+  formatCost,
   formatTokens,
   hasCacheActivity,
   isFlagSet,
@@ -108,4 +110,18 @@ test('isFlagSet reads DISABLE_PROMPT_CACHING', async () => {
   expect(isFlagSet('false')).toBe(false)
   expect(isFlagSet('1')).toBe(true)
   expect(isFlagSet('true')).toBe(true)
+})
+
+describe('costSegment', () => {
+  test('formats dollars to the cent', async () => {
+    expect(formatCost(1.234)).toBe('$1.23')
+    expect(formatCost(0.006)).toBe('$0.01')
+    expect(formatCost(12)).toBe('$12.00')
+  })
+
+  test('hides until the session has cost anything', async () => {
+    expect(costSegment(null)).toBeNull()
+    expect(costSegment(0)).toBeNull()
+    expect(costSegment(0.42)).toEqual({ text: '$0.42' })
+  })
 })

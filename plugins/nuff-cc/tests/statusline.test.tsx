@@ -28,7 +28,7 @@ const CACHED: TurnUsage = {
 }
 const UNCACHED: TurnUsage = { ...CACHED, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
-type World = { tokens?: number; window?: number; env?: Record<string, string> }
+type World = { tokens?: number; window?: number; usd?: number; env?: Record<string, string> }
 
 // The engine beneath the plugin: a session whose usage reads `tokens`, a clock
 // at T0, and each event the plugin hooks answered at the bottom.
@@ -43,6 +43,7 @@ function engine(on: On, world: World = {}) {
       startedAt: T0,
       context: { tokens: world.tokens, window: world.window ?? 1_000_000 },
       rateLimits: [],
+      ...(world.usd === undefined ? {} : { cost: { usd: world.usd } }),
     },
   }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -276,6 +277,42 @@ test('a model switch makes the cache cold; a resume restore does not', async ($,
 
   await $.classic.PostModelSwitch({ ...sw, to_model: 'claude-sonnet-5-5', source: 'picker' })
   expect(await line($)).toBe('cold')
+})
+
+test('the cost seeds from usage, follows session.measure and sits after the cache', async ($, on) => {
+  engine(on, { tokens: 173_000, usd: 1.5 })
+  await start($)
+  await step($)
+
+  expect(await status($)).toEqual([
+    { text: '173k', color: undefined, dim: undefined },
+    { text: ' · ', color: undefined, dim: true },
+    { text: '◷ 60m', color: 'success', dim: undefined },
+    { text: ' · ', color: undefined, dim: true },
+    { text: '$1.50', color: undefined, dim: undefined },
+  ])
+
+  await $.session.measure({
+    context: { tokens: 180_000, window: 1_000_000 },
+    rateLimits: [],
+    cost: { usd: 2.346 },
+    changed: ['context', 'cost'],
+  })
+  expect(await line($)).toBe('180k · ◷ 60m · $2.35')
+})
+
+test('the cost survives a compaction and hides after /clear', async ($, on) => {
+  engine(on, { tokens: 50_000, usd: 0.75 })
+  await start($)
+  await step($)
+  await $.session.compact({
+    trigger: 'manual',
+    messages: [{ role: 'user', text: 'summary', toolUses: [] }],
+  })
+  expect(await line($)).toBe('cold · $0.75')
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(await line($)).toBe('')
 })
 
 test('DISABLE_PROMPT_CACHING shows a dim cache off', async ($, on) => {
