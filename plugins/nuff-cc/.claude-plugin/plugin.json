@@ -1,19 +1,21 @@
 {
     "name": "nuff-cc",
-    "version": "1.0.0",
-    "description": "Claude Code only: good enough Claude Code mods - open the current session's folder in VS Code from a button above the prompt or /vscode.",
+    "version": "1.1.0",
+    "description": "Claude Code only: good enough Claude Code mods - a desktop status line (context size, prompt-cache countdown) and opening the session's folder in VS Code from a button above the prompt or /vscode.",
     "author": {
         "name": "filip-be"
     },
     "homepage": "https://github.com/filip-be/nuff-plugin",
     "repository": "https://github.com/filip-be/nuff-plugin",
     "license": "MIT",
+    "types": "./types/index.d.ts",
     "keywords": [
         "ai",
         "ai-agent",
         "enough",
         "nuff",
         "mods",
-        "vscode"
+        "vscode",
+        "statusline"
     ]
 }
