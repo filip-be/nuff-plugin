@@ -4,8 +4,10 @@ description: A relentless interview to sharpen a plan or design, which also crea
 disable-model-invocation: true
 ---
 
-Run a `/grilling` session, using the `/domain-modeling` skill. The session includes its `/adversarial-review plan`; do not act on the plan until the user has approved it.
+Run a `/grilling` session, using the `/domain-modeling` skill. The session includes its `/adversarial-review plan`.
 
-Once the user approves the plan, write it to .agents/PLAN.md. End the plan with this as its last step, word for word:
+As soon as the plan review ends, write the plan to .agents/PLAN.md without asking first. Only then present the plan and ask the user to approve it, in a single approval step. Writing the file is not acting on the plan: do not implement anything until the user has approved it. If the user asks for changes, update .agents/PLAN.md and ask again.
+
+End the plan with this as its last step, word for word:
 
 > **Final step:** when the implementation is done, run `/adversarial-review code`. Only after it ends, report the work as done or create a PR.
