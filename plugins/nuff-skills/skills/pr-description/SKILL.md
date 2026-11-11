@@ -17,7 +17,7 @@ Agent-written pull request descriptions are accurate but long, so reviewers skip
 Top to bottom:
 
 1. The **Opener**: one paragraph of one to three sentences. No headings, no lists.
-2. Issue-closing keywords (e.g. `Closes #12`), when the change closes an issue.
+2. Closing keywords, when the change closes an issue or a work item (e.g. `Closes #12` for a GitHub issue, `Fixes AB#12` for an Azure DevOps work item).
 3. The **Collapsed description**: everything else you would normally write, including screenshots and your attribution footer.
 
 ```markdown
