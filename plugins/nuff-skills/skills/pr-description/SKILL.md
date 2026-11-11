@@ -55,6 +55,16 @@ Take it from the first source that exists:
 
 Say what the change is for, not how it was made. Do not ask the user to approve the Opener: create the pull request right away, then show the Opener in your report and name the source it came from.
 
+## Screenshots
+
+A screenshot shows a reviewer in seconds what paragraphs of text cannot. **Whenever the change has a visible result, try to add screenshots when you create the pull request** — do not wait to be asked.
+
+- A visible result is anything a person can look at: a page, a dialog, a chart, a rendered document, terminal output.
+- If you can run the changed thing and capture it, do so. Show the changed part, and add a before/after pair when the difference is the point.
+- For terminal output, paste the output as a code block instead of an image.
+- Put screenshots at the top of the Collapsed description, each with one line saying what it shows.
+- Never hold back the pull request for a screenshot. If you could not capture one, or cannot upload an image to the pull request, create it without and tell the user in your report which screenshots are worth adding, and where the files are if you captured any.
+
 ## Pull request templates
 
 If the repository has a pull request template (e.g. `.github/PULL_REQUEST_TEMPLATE.md`), the template wins. Fill in its sections and checkboxes and leave them visible, put the Opener above them, and move only your long prose into the Collapsed description.
