@@ -46,6 +46,16 @@ _Avoid_: Deviation, change of plan
 One Reviewer pass plus the agent's response to its Findings; a review stops after three rounds and hands what is left to the user.
 _Avoid_: Iteration, pass
 
+## PR description
+
+**Opener**:
+The one to three sentences at the top of a pull request description that say what the change is for, taken from the user's own words or drafted by the agent from the user's original request. Once posted it belongs to the user.
+_Avoid_: Summary, TL;DR, intro
+
+**Collapsed description**:
+The agent's full pull request description, folded away below the Opener under a label naming the model that wrote it.
+_Avoid_: Details, body, AI section
+
 ## Guardrail hooks
 
 Hooks that keep an honest agent from accidentally reading, writing or deleting outside the places it should touch.
