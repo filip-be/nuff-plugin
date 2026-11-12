@@ -63,7 +63,36 @@ A screenshot shows a reviewer in seconds what paragraphs of text cannot. **Whene
 - If you can run the changed thing and capture it, do so. Show the changed part, and add a before/after pair when the difference is the point.
 - For terminal output, paste the output as a code block instead of an image.
 - Put screenshots at the top of the Collapsed description, each with one line saying what it shows.
+- Never commit the screenshot files. Save them outside the repository, or leave them untracked.
+- Do not upload a screenshot that shows secrets or personal data. Tell the user where the file is instead.
 - Never hold back the pull request for a screenshot. If you could not capture one, or cannot upload an image to the pull request, create it without and tell the user in your report which screenshots are worth adding, and where the files are if you captured any.
+
+### Uploading on GitHub
+
+Plain `git` cannot attach an image, but the GitHub CLI can. Write each screenshot into the description as an ordinary Markdown image with a local path, and pass the same file with `--attach`. `gh` uploads the file and replaces the path with the uploaded link, wherever the image sits in the description.
+
+```markdown
+<details>
+<summary>Claude Opus 5.5 Medium</summary>
+
+The row page after the change:
+
+![Row shown as a list of labelled fields](./after.png)
+
+## Summary
+```
+
+```bash
+gh pr create --title "..." --body-file body.md --attach ./after.png
+```
+
+- Repeat `--attach` for each file. `gh pr edit <number>` takes the same flag.
+- A path in the body file is relative to that file's folder.
+- Pass `--attach` without checking first whether your `gh` supports it. What you do when the command fails depends on whether the pull request exists:
+  - **Not created (or not updated)**, whatever the reason — unknown flag, no push access, rejected file: remove the image references from the description and run the command again without `--attach`.
+  - **Created (or updated)** — `gh` printed its URL but exited with an error, because some uploads failed: do not run the command again. Edit the description to remove any image reference that still has a local path.
+- With no `gh` at all, create the pull request without the images.
+- In each of these cases, report which screenshots are missing, where the files are and the error `gh` gave. When the error was an unknown `--attach` flag, or `gh` is missing, add that a current GitHub CLI would let you attach them.
 
 ## Pull request templates
 
@@ -74,5 +103,6 @@ If the repository has a pull request template (e.g. `.github/PULL_REQUEST_TEMPLA
 The Collapsed description is the top-level `<details>` block whose `<summary>` names a model. Regenerate that block and nothing else.
 
 - **Everything outside it is frozen.** That covers the Opener, text the user added, other `<details>` blocks, and template sections and checkboxes — even ones you filled in when the pull request was created. When a frozen part no longer matches the change, leave it as it is and tell the user it looks stale, with a suggested replacement.
+- **Screenshots already in the block stay.** Carry their uploaded image links over as they are. Capture and attach new screenshots only when the visible result has changed since.
 - **No such block.** Treat the existing text as the user's: keep it untouched, append the Collapsed description below it, add no Opener, and say so in your report.
 - **No such block, and the existing text ends with an agent attribution footer.** It is agent-written: write an Opener and replace the old text with a fresh Collapsed description.
