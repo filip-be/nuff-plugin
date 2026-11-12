@@ -71,16 +71,15 @@ A screenshot shows a reviewer in seconds what paragraphs of text cannot. **Whene
 
 Plain `git` cannot attach an image, but the GitHub CLI can. Write each screenshot into the description as an ordinary Markdown image with a local path, and pass the same file with `--attach`. `gh` uploads the file and replaces the path with the uploaded link, wherever the image sits in the description.
 
-```markdown
-<details>
-<summary>Claude Opus 5.5 Medium</summary>
+In the description, at the top of the Collapsed description:
 
+```markdown
 The row page after the change:
 
 ![Row shown as a list of labelled fields](./after.png)
-
-## Summary
 ```
+
+The command:
 
 ```bash
 gh pr create --title "..." --body-file body.md --attach ./after.png
