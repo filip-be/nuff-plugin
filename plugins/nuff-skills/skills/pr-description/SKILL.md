@@ -63,9 +63,9 @@ A screenshot shows a reviewer in seconds what paragraphs of text cannot. **Whene
 - If you can run the changed thing and capture it, do so. Show the changed part, and add a before/after pair when the difference is the point.
 - For terminal output, paste the output as a code block instead of an image.
 - Put screenshots at the top of the Collapsed description, each with one line saying what it shows.
-- Never commit the screenshot files. Save them outside the repository, or leave them untracked.
+- Never leave screenshot files in the branch's final tree. Save them outside the repository, or leave them untracked. The one exception is the add-then-remove pair of commits described under "When `gh` cannot upload".
 - Do not upload a screenshot that shows secrets or personal data. Tell the user where the file is instead.
-- Never hold back the pull request for a screenshot. If you could not capture one, or cannot upload an image to the pull request, create it without and tell the user in your report which screenshots are worth adding, and where the files are if you captured any.
+- Never hold back the pull request for a screenshot. If you could not capture one, or cannot get an image into the pull request, create it without and tell the user in your report which screenshots are worth adding, and where the files are if you captured any.
 
 ### Uploading on GitHub
 
@@ -88,10 +88,41 @@ gh pr create --title "..." --body-file body.md --attach ./after.png
 - Repeat `--attach` for each file. `gh pr edit <number>` takes the same flag.
 - A path in the body file is relative to that file's folder.
 - Pass `--attach` without checking first whether your `gh` supports it. What you do when the command fails depends on whether the pull request exists:
-  - **Not created (or not updated)**, whatever the reason — unknown flag, no push access, rejected file: remove the image references from the description and run the command again without `--attach`.
-  - **Created (or updated)** — `gh` printed its URL but exited with an error, because some uploads failed: do not run the command again. Edit the description to remove any image reference that still has a local path.
-- With no `gh` at all, create the pull request without the images.
-- In each of these cases, report which screenshots are missing, where the files are and the error `gh` gave. When the error was an unknown `--attach` flag, or `gh` is missing, add that a current GitHub CLI would let you attach them.
+  - **Not created (or not updated)**, whatever the reason — unknown flag, refused request, rejected file: carry the screenshots in a commit instead, as described below.
+  - **Created (or updated)** — `gh` printed its URL but exited with an error, because some uploads failed: do not run the command again. Carry the screenshots that still have a local path in a commit instead.
+- With no `gh` at all, carry the screenshots in a commit too.
+
+### When `gh` cannot upload
+
+Some sessions can push commits but cannot upload a file to GitHub. A Claude Code cloud session is one: `CLAUDE_CODE_REMOTE` is `true`, `gh` fails with `GitHub GraphQL is not available from Claude Code sessions`, and you create the pull request with the GitHub tools you were given. There, skip `--attach` and go straight to this.
+
+Carry the screenshots on the pull request's branch in two commits: one that adds them, and one that removes them again. The description links to the files as they are in the first commit. The pull request's diff shows no image, and the link keeps working after the branch is merged or deleted, because GitHub keeps every commit a pull request ever held.
+
+```bash
+mkdir -p .pr-screenshots
+cp /path/outside/the/repo/after.png .pr-screenshots/
+git add -f .pr-screenshots
+git commit -m "Add screenshots for the pull request description"
+sha=$(git rev-parse HEAD)
+
+git rm -r -q .pr-screenshots
+git commit -m "Remove screenshots for the pull request description"
+git push
+```
+
+In the description, use the full link with that commit's hash, not a relative path:
+
+```markdown
+![Row shown as a list of labelled fields](https://github.com/<owner>/<repo>/blob/<sha>/.pr-screenshots/after.png?raw=true)
+```
+
+- Make the two commits last, after the work is committed, and push before you create or edit the pull request.
+- Use the full 40-character hash. A branch name in the link breaks when the branch is deleted.
+- Do this only on a branch you may push to. Never rewrite history to get rid of the two commits: that breaks the links.
+- Keep the files small. When the pull request is merged without squashing, they stay in the repository's history.
+- When you cannot push either, create the pull request without the images.
+
+Whenever a screenshot did not make it into the description, report which ones are missing, where the files are and the error you got.
 
 ## Pull request templates
 
