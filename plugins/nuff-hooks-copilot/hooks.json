@@ -5,7 +5,7 @@
             {
                 "type": "command",
                 "matcher": "^(view|create|edit|str_replace_editor|apply_patch|grep|rg|glob|bash|powershell|write_bash|write_powershell)$",
-                "powershell": "py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\"",
+                "powershell": "if (Get-Command py -ErrorAction SilentlyContinue) { py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\" } elseif (Get-Command python3 -ErrorAction SilentlyContinue) { python3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\" } else { [Console]::Error.WriteLine('nuff-hooks: Python 3 not found, call denied'); exit 2 }; exit $LASTEXITCODE",
                 "bash": "if command -v py >/dev/null 2>&1; then py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${PLUGIN_ROOT}/hooks/nuff_hooks_copilot.py\"; else echo 'nuff-hooks: Python 3 not found, call denied' >&2; exit 2; fi",
                 "timeoutSec": 15
             }

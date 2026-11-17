@@ -5,7 +5,7 @@ Shared source of the guardrail hooks shipped by [nuff-hooks-cc](../nuff-hooks-cc
 - [Glossary](../../CONTEXT.md#guardrail-hooks) — Workspace, Read Roots, Read Zone, Write Zone, Trash, Removal, Rewrite (in the root CONTEXT.md)
 - Read Roots are configured in `~/.nuff-hooks.json` — see [nuff-hooks-cc](../nuff-hooks-cc/README.md#read-roots)
 - [core/nuff_hooks_core.py](./core/nuff_hooks_core.py) — platform-neutral checks; the canonical copy
-- [tests/](./tests) — unit tests and the copy-sync test
+- [tests/](./tests) — unit tests, the copy-sync test and tests of the `hooks.json` launch commands (`py`, else `python3`, else deny)
 
 ## Changing the core
 

@@ -52,7 +52,7 @@ On Linux and macOS the Read Zone has no default extra root, so system paths such
 
 ## Prerequisites
 
-- Python 3.10+: on Windows the `py` launcher (`py -3 --version`), on Linux and macOS `python3` on `PATH` (`python3 --version`). The hook uses `py` when it finds it, else `python3`; with neither, every checked call is denied.
+- Python 3.10+: on Windows the `py` launcher (`py -3 --version`), on Linux and macOS `python3` on `PATH` (`python3 --version`). The hook uses `py` when it finds it, else `python3`; with neither, every checked call is denied. Copilot runs the hook's `powershell` command on Windows and its `bash` command on Linux and macOS; both follow these same steps.
 
 ## Known gaps
 
