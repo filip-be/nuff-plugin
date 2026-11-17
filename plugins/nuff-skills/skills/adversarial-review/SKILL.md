@@ -17,16 +17,16 @@ Mode comes from the arguments (`plan` or `code`). If none is given, infer it: a 
 - **Review brief** — the one document handed to the Reviewer.
 - **Finding** — a gap, miss or risk that would change the outcome. Style, naming and taste never qualify.
 - **Divergence** — a decision taken during implementation that departs from the plan.
-- **Review round** — one Reviewer pass plus your response to its Findings. Maximum **3** rounds per review.
+- **Review round** — one Reviewer pass plus your response to its Findings. There is no round limit.
 
 ## 1. Pick the Reviewer model
 
 | Your own model | Reviewer `--model` |
 | -------------- | ------------------ |
 | GPT (OpenAI) | `claude-opus-5.5` |
-| Anything else (Claude, Gemini, …) | `gpt-6.1-sol` |
+| Anything else (Claude, Gemini, …) | `gpt-6.2-sol` |
 
-Reasoning effort is always `medium`.
+Reasoning effort is always `high`.
 
 ## 2. Check the engine
 
@@ -55,7 +55,7 @@ Before a `code` review, commit all changes. Compute the base with `git merge-bas
 Generate one new UUID per review (not per round) and reuse it in every round so the Reviewer keeps its memory. Run from the workspace root and pipe the brief as the prompt:
 
 ```bash
-copilot --model <model> --reasoning-effort medium \
+copilot --model <model> --reasoning-effort high \
   --experimental --assisted-approval --allow-all-tools \
   --no-ask-user --silent --session-id=<uuid> < <brief-file>
 ```
@@ -78,6 +78,8 @@ Everything else — brief, rounds, verdict, triage — stays the same.
 
 `VERDICT: CLEAN` ends the review. Otherwise handle every Finding, then start the next round by writing a follow-up file with your response to each Finding (by number) and running the same command with the same `--session-id` (or the same subagent, as above).
 
+Keep going round by round until `VERDICT: CLEAN`. The only other way out is a deadlock: every remaining Finding is one the Reviewer maintained after your rejection, and neither side has a new argument. Mark those Findings **Open** and finish.
+
 ### `plan` mode
 
 Triage each Finding before involving the user:
@@ -94,11 +96,11 @@ For each Finding either **fix it** (and commit) or **reject it** with a concrete
 
 ## 6. Finish
 
-After `VERDICT: CLEAN` or after round 3, report to the user in chat:
+After `VERDICT: CLEAN` or a deadlock, report to the user in chat:
 
 - Reviewer engine (Copilot CLI or host subagent), model and number of rounds.
 - What was fixed or decided because of the review.
 - Findings you rejected and the Reviewer accepted.
-- **Open** — anything unresolved after round 3, with both sides' positions, for the user to decide.
+- **Open** — Findings left in deadlock, with both sides' positions, for the user to decide.
 
 In `plan` mode, this report goes with the plan you present for approval. Do not act on the plan while open Findings remain unless the user says so.
