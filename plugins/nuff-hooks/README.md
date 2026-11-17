@@ -14,7 +14,9 @@ Edit `core/nuff_hooks_core.py`, then copy it into both plugins and run the tests
 ```bash
 cp plugins/nuff-hooks/core/nuff_hooks_core.py plugins/nuff-hooks-cc/hooks/
 cp plugins/nuff-hooks/core/nuff_hooks_core.py plugins/nuff-hooks-copilot/hooks/
-py -3 -m unittest discover -s plugins/nuff-hooks/tests -v
+py -3 -m unittest discover -s plugins/nuff-hooks/tests -v   # python3 on Linux and macOS
 ```
+
+The tests check both the Windows and the Linux/macOS rules on any OS (they switch `WINDOWS` in the core).
 
 Bump the version of both plugins when the core changes.

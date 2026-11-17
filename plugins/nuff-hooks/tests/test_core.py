@@ -23,7 +23,40 @@ def ctx(workspace=WORKSPACE, cwd=None, env=None):
     return core.Context(workspace=workspace, cwd=cwd or workspace, session_id="sess-1", env=env or base)
 
 
-class FileTools(unittest.TestCase):
+def patch(test, *patchers):
+    for patcher in patchers:
+        patcher.start()
+        test.addCleanup(patcher.stop)
+
+
+def configure(test, config):
+    """Serve `config` (None: no file) as ~/.nuff-hooks.json."""
+    def read(_path):
+        if config is None:
+            raise FileNotFoundError(_path)
+        return config
+    patch(test, mock.patch.object(core, "_read_config", side_effect=read))
+
+
+class WindowsCase(unittest.TestCase):
+    """Windows rules, checked on any OS."""
+
+    def setUp(self):
+        patch(self, mock.patch.object(core, "WINDOWS", True),
+              mock.patch.object(core.tempfile, "gettempdir", return_value=TEMP))
+        configure(self, None)
+
+
+class PosixCase(unittest.TestCase):
+    """Linux and macOS rules, checked on any OS."""
+
+    def setUp(self):
+        patch(self, mock.patch.object(core, "WINDOWS", False),
+              mock.patch.object(core.tempfile, "gettempdir", return_value="/tmp"))
+        configure(self, None)
+
+
+class FileTools(WindowsCase):
     def test_reads(self):
         cases = {
             "C:\\Windows\\win.ini": "deny",
@@ -69,7 +102,7 @@ class FileTools(unittest.TestCase):
         self.assertEqual(core.check_patch(relative, ctx()).kind, "allow")
 
 
-class Shell(unittest.TestCase):
+class Shell(WindowsCase):
     def assertShell(self, cases, shell):
         for command, expected in cases:
             with self.subTest(command=command):
@@ -198,25 +231,21 @@ class Shell(unittest.TestCase):
         ], "powershell")
 
 
-class ReadRoots(unittest.TestCase):
-    def setUp(self):
-        self.home = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.home)
-
+class ReadRoots(WindowsCase):
     def ctx(self, config=None, workspace=WORKSPACE, cwd=None):
         if config is not None:
-            Path(self.home, ".nuff-hooks.json").write_text(config, encoding="utf-8")
-        env = {"USERPROFILE": self.home, "TEMP": TEMP, "TMP": TEMP}
+            configure(self, config)
+        env = {"USERPROFILE": HOME, "TEMP": TEMP, "TMP": TEMP}
         return core.Context(workspace=workspace, cwd=cwd or workspace, session_id="s", env=env)
 
     def test_no_config(self):
         decision = core.check_read("C:\\DEV\\proj\\a.py", self.ctx())
         self.assertEqual(decision.kind, "deny")
-        self.assertIn(os.path.join(self.home, ".nuff-hooks.json"), decision.reason)
+        self.assertIn(HOME + "\\.nuff-hooks.json", decision.reason)
 
     def test_configured_roots(self):
         context = lambda: self.ctx('{"readRoots": ["C:\\\\DEV", "E:/src/", "~\\\\code"]}')
-        self.assertEqual(core.read_roots(context()), ["C:\\DEV", "E:\\src", os.path.join(self.home, "code")])
+        self.assertEqual(core.read_roots(context()), ["C:\\DEV", "E:\\src", HOME + "\\code"])
         cases = {
             "C:\\DEV\\proj\\a.py": "allow",
             "C:\\DEV": "allow",
@@ -285,9 +314,12 @@ class Rewrite(unittest.TestCase):
 
     def run_shell(self, command, shell):
         if shell == "bash":
-            bash = Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "Git" / "bin" / "bash.exe"
+            if os.name == "nt":
+                bash = Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "Git" / "bin" / "bash.exe"
+            else:
+                bash = Path(shutil.which("bash") or "/bin/bash")
             if not bash.exists():
-                self.skipTest("Git Bash not installed")
+                self.skipTest("bash not installed")
             argv = [str(bash), "-c", command]
         else:
             pwsh = shutil.which("pwsh")
@@ -299,8 +331,9 @@ class Rewrite(unittest.TestCase):
         return result.stdout
 
     def test_trash_layout(self):
-        dest = core.trash_path("D:\\nuff\\src\\a.md", self.ctx)
-        self.assertEqual(dest, os.path.join(str(self.trash), self.workspace.name, "sess-1", "nuff\\src\\a.md"))
+        source = "D:\\nuff\\src\\a.md" if os.name == "nt" else "/nuff/src/a.md"
+        dest = core.trash_path(source, self.ctx)
+        self.assertEqual(dest, os.path.join(str(self.trash), self.workspace.name, "sess-1", "nuff", "src", "a.md"))
 
     def test_bash_rm_moves_files_and_dirs(self):
         decision = core.check_shell("rm -rf a.txt dir", "bash", self.ctx)
@@ -353,6 +386,134 @@ class Rewrite(unittest.TestCase):
         decision = core.check_shell("rm a.txt && ls", "bash", self.ctx)
         self.assertEqual(decision.kind, "deny")
         self.assertIn("standalone", decision.reason)
+
+
+
+POSIX_HOME = "/home/me"
+POSIX_WORKSPACE = "/home/me/work/proj"
+
+
+def posix_ctx(workspace=POSIX_WORKSPACE, cwd=None, env=None):
+    base = {"HOME": POSIX_HOME, "TMPDIR": "/var/folders/xy/T/", "PROJ": POSIX_WORKSPACE}
+    return core.Context(workspace=workspace, cwd=cwd or workspace, session_id="sess-1", env=env or base)
+
+
+class Posix(PosixCase):
+    def test_file_tools(self):
+        reads = {
+            POSIX_WORKSPACE + "/src/a.py": "allow",
+            "/etc/passwd": "deny",
+            "/home/me/work/other/x": "deny",
+            POSIX_HOME + "/.claude/settings.json": "allow",
+            POSIX_HOME + "/.ssh/id_rsa": "deny",
+            "/tmp/claude-0/scratch/x": "allow",
+            "/var/folders/xy/T/x": "allow",
+            "//etc/passwd": "deny",
+            "src/../../other/x": "deny",
+            "D:\\other\\x": "allow",  # a file named so inside the Workspace
+        }
+        for path, expected in reads.items():
+            with self.subTest(read=path):
+                self.assertEqual(core.check_read(path, posix_ctx()).kind, expected)
+        writes = {
+            POSIX_WORKSPACE + "/a.py": "allow",
+            "/home/me/work/proj-evil/a.py": "deny",
+            POSIX_HOME + "/.slop-trash/x": "allow",
+            POSIX_HOME + "/.bashrc": "deny",
+            "/tmp/x": "allow",
+            "/usr/local/bin/x": "deny",
+        }
+        for path, expected in writes.items():
+            with self.subTest(write=path):
+                self.assertEqual(core.check_write(path, posix_ctx()).kind, expected)
+        self.assertEqual(core.check_search("/etc", None, posix_ctx()).kind, "deny")
+        self.assertEqual(core.check_search(None, "/etc/**/*.conf", posix_ctx()).kind, "deny")
+        self.assertEqual(core.check_search(None, "src/**/*.py", posix_ctx()).kind, "allow")
+
+    def test_case_sensitive(self):
+        self.assertEqual(core.check_write("/home/me/work/PROJ/a.py", posix_ctx()).kind, "deny")
+
+    def test_bash(self):
+        for command, expected in [
+            ("ls -la", "allow"),
+            ("cat /etc/passwd", "deny"),
+            ("cat /d/other/x", "deny"),  # no drive mapping on POSIX
+            ("cat ~/.claude/x", "allow"),
+            ("cat $HOME/.ssh/id_rsa", "deny"),
+            ('cat "$PROJ/README.md"', "allow"),
+            ("echo hi > /dev/stderr", "allow"),
+            ("echo hi > /dev/null 2>&1", "allow"),
+            ("echo hi > nul", "allow"),  # a file in the Workspace
+            ("touch /usr/local/x", "deny"),
+            ("cd /etc && cat passwd", "deny"),
+            ("cd /tmp && touch x", "allow"),
+            ("cp /etc/hosts .", "deny"),
+            ("cp a /home/me/x", "deny"),
+            ("git -C /home/me/other log", "deny"),
+            ("for d in src /etc; do cat $d/x; done", "deny"),
+            ("rm -rf /", "deny"),
+            ("rm a.txt && ls", "deny"),
+        ]:
+            with self.subTest(command=command):
+                decision = core.check_shell(command, "bash", posix_ctx())
+                self.assertEqual(decision.kind, expected, decision.reason)
+
+    def test_powershell(self):
+        for command, expected in [
+            ("Get-Content /etc/passwd", "deny"),
+            ("Get-Content src\\a.py", "allow"),
+            ("Get-Content ..\\..\\x", "deny"),
+            ("Set-Content -Path $env:HOME/.claude/x -Value hi", "allow"),
+            ("'x' | Out-File $null", "allow"),
+        ]:
+            with self.subTest(command=command):
+                decision = core.check_shell(command, "powershell", posix_ctx())
+                self.assertEqual(decision.kind, expected, decision.reason)
+
+    def test_messages_name_posix_trash(self):
+        decision = core.check_write("/etc/x", posix_ctx())
+        self.assertIn("/home/me/.slop-trash", decision.reason)
+        self.assertNotIn("D:", decision.reason)
+        decision = core.check_read("/etc/x", posix_ctx())
+        self.assertIn("the Read Zone is the Workspace, the agent's home dirs", decision.reason)
+        self.assertIn("/home/me/.nuff-hooks.json", decision.reason)
+
+    def test_trash_is_under_home(self):
+        self.assertEqual(core.trash_path("/home/me/work/proj/a.txt", posix_ctx()),
+                         "/home/me/.slop-trash/proj/sess-1/home/me/work/proj/a.txt")
+
+    def test_removal_inside_trash_is_denied(self):
+        with mock.patch.object(core.os.path, "lexists", return_value=True):
+            decision = core.check_shell("rm /home/me/.slop-trash/proj/x", "bash", posix_ctx())
+        self.assertEqual(decision.kind, "deny")
+        self.assertIn("only the user empties Trash", decision.reason)
+
+    def test_quoting_keeps_backslashes(self):
+        exists = lambda path: not path.startswith(POSIX_HOME + "/.slop-trash")  # the source, not a Trash copy
+        with mock.patch.object(core.os.path, "lexists", side_effect=exists):
+            decision = core.check_shell("rm 'a\\b.txt'", "bash", posix_ctx())
+        self.assertEqual(decision.kind, "rewrite", decision.reason)
+        self.assertIn("'/home/me/work/proj/a\\b.txt'", decision.command)
+
+
+class PosixReadRoots(PosixCase):
+    def test_configured_roots(self):
+        configure(self, '{"readRoots": ["/opt/src/", "~/code", "/usr"]}')
+        context = posix_ctx()
+        self.assertEqual(core.read_roots(context), ["/opt/src", "/home/me/code", "/usr"])
+        for path, expected in {"/opt/src/a": "allow", "/opt/srcx/a": "deny", "/home/me/code/x": "allow",
+                               "/usr/include/stdio.h": "allow", "/etc/passwd": "deny"}.items():
+            with self.subTest(path=path):
+                self.assertEqual(core.check_read(path, posix_ctx()).kind, expected)
+        self.assertEqual(core.check_write("/opt/src/a", posix_ctx()).kind, "deny")
+
+    def test_relative_or_windows_root_drops_all(self):
+        for config in ('{"readRoots": ["/opt", "src"]}', '{"readRoots": ["C:\\\\DEV"]}'):
+            with self.subTest(config=config):
+                configure(self, config)
+                decision = core.check_read("/opt/a", posix_ctx())
+                self.assertEqual(decision.kind, "deny")
+                self.assertIn("not an absolute path like /opt/src", decision.reason)
 
 
 if __name__ == "__main__":

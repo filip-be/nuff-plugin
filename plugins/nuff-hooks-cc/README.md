@@ -1,16 +1,16 @@
 # nuff-hooks-cc
 
-Good enough guardrail hooks for **Claude Code only**: they use Claude Code's hook format and do not run in other agents.
+Good enough guardrail hooks for **Claude Code only**: they use Claude Code's hook format and do not run in other agents. They work on Windows, Linux and macOS.
 
 ## Terms
 
 - **Workspace** — the project directory the agent session started in (`CLAUDE_PROJECT_DIR`, else the working directory), and everything below it. For a session in a git worktree, that is the worktree root.
 - **Agent Dirs** — the agent's own home configuration: `~/.claude`, `~/.claude.json` and `~/.copilot`.
-- **Temp** — the OS temp directory (`TEMP` / `TMP`), including the agent's scratchpad inside it.
+- **Temp** — the OS temp directory (`TEMP` / `TMP` / `TMPDIR`), including the agent's scratchpad inside it.
 - **Read Roots** — extra directories you let the agent read, listed in `~/.nuff-hooks.json` (see [Read Roots](#read-roots)).
-- **Read Zone** — everywhere the agent may read: the Workspace, the `D:\` drive, Read Roots, Agent Dirs and Temp.
+- **Read Zone** — everywhere the agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp.
 - **Write Zone** — everywhere the agent may write: the Workspace, Trash, Agent Dirs and Temp.
-- **Trash** — the folder `D:\.slop-trash`, where removed files are kept instead of being deleted.
+- **Trash** — the folder where removed files are kept instead of being deleted: `D:\.slop-trash` on Windows, `~/.slop-trash` on Linux and macOS.
 - **Removal** — a shell delete command (`rm`, `rmdir`, `unlink`, `shred`, `del`, `erase`, `rd`, `Remove-Item` and its aliases) aimed at files or directories. Git commands and overwriting moves are not Removals.
 - **Rewrite** — replacing a Removal, before it runs, with a move of the same targets into Trash.
 
@@ -20,9 +20,9 @@ A `PreToolUse` hook on `Read`, `Write`, `Edit`, `NotebookEdit`, `Glob`, `Grep`, 
 
 | Rule | Behaviour |
 | ---- | --------- |
-| Read Zone | Reads only from the Workspace, `D:\`, the [Read Roots](#read-roots) you configure, the agent's home dirs (`~/.claude`, `~/.copilot`) and the temp dir |
-| Write Zone | Writes only to the Workspace (`CLAUDE_PROJECT_DIR`), `D:\.slop-trash`, the agent's home dirs and the temp dir |
-| Removal | A standalone `rm` / `Remove-Item` / `del` ... is rewritten into a move to `D:\.slop-trash\<workspace>\<session>\<original path>`; other removals are denied with a hint |
+| Read Zone | Reads only from the Workspace, `D:\` (Windows only), the [Read Roots](#read-roots) you configure, the agent's home dirs (`~/.claude`, `~/.copilot`) and the temp dir |
+| Write Zone | Writes only to the Workspace (`CLAUDE_PROJECT_DIR`), Trash, the agent's home dirs and the temp dir |
+| Removal | A standalone `rm` / `Remove-Item` / `del` ... is rewritten into a move to `<Trash>/<workspace>/<session>/<original path>`; other removals are denied with a hint |
 | Evasion | `iex`/`eval`, encoded commands, unresolvable variables, UNC paths and nested shells deeper than one level are denied |
 | Failure | Any internal error denies the call |
 
@@ -30,7 +30,7 @@ Allowed calls get no decision, so your normal permission prompts still apply.
 
 ## Read Roots
 
-To let the agent read outside `D:\` (say your projects live in `C:\DEV`), list extra directories in `~/.nuff-hooks.json` (`%USERPROFILE%\.nuff-hooks.json`):
+To let the agent read elsewhere (say your projects live in `C:\DEV`, or `/opt/src` on Linux), list extra directories in `~/.nuff-hooks.json` (`%USERPROFILE%\.nuff-hooks.json` on Windows):
 
 ```json
 {
@@ -38,13 +38,21 @@ To let the agent read outside `D:\` (say your projects live in `C:\DEV`), list e
 }
 ```
 
-- Entries must be absolute paths (`C:\DEV`, `C:/DEV`) or start with `~`; each root covers everything below it. They only widen the Read Zone, never the Write Zone.
+On Linux and macOS the Read Zone has no default extra root, so system paths such as `/usr` or `/etc` are denied until you list them:
+
+```json
+{
+    "readRoots": ["/opt/src", "~/src", "/usr/include"]
+}
+```
+
+- Entries must be absolute paths for the platform (`C:\DEV` or `C:/DEV` on Windows, `/opt/src` on Linux and macOS) or start with `~`; each root covers everything below it. They only widen the Read Zone, never the Write Zone.
 - The file is read on every tool call, so changes apply at once. It lives outside the Write Zone on purpose: the agent can't edit it.
 - If the file is not valid JSON or any entry is not an absolute path, every configured root is ignored and denied reads say why.
 
 ## Prerequisites
 
-- Windows, with the `py` launcher and Python 3.10+ (`py -3 --version`)
+- Python 3.10+: on Windows the `py` launcher (`py -3 --version`), on Linux and macOS `python3` on `PATH` (`python3 --version`). The hook uses `py` when it finds it, else `python3`; with neither, every checked call is denied.
 
 ## Known gaps
 

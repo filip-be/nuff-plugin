@@ -1,4 +1,4 @@
-"""Platform-neutral checks behind the nuff-hooks plugins.
+"""Checks behind the nuff-hooks plugins, for Windows, Linux and macOS.
 
 This file ships unchanged in plugins/nuff-hooks-cc/hooks and plugins/nuff-hooks-copilot/hooks.
 Every copy must stay byte-identical with plugins/nuff-hooks/core (tests/test_sync.py checks it).
@@ -12,25 +12,24 @@ from __future__ import annotations
 
 import glob
 import json
+import ntpath
 import os
+import posixpath
 import re
 import shlex
 import shutil
 import tempfile
 from dataclasses import dataclass, field, replace
 
-READ_ROOTS = ("D:\\",)
-TRASH = "D:\\.slop-trash"
+WINDOWS = os.name == "nt"  # Windows paths and defaults; else POSIX (Linux, macOS). Tests switch it.
+WINDOWS_READ_ROOTS = ("D:\\",)  # POSIX has no default extra Read Roots
+WINDOWS_TRASH = "D:\\.slop-trash"
+POSIX_TRASH = ".slop-trash"  # relative to the user's home
+TRASH = None  # overrides the platform's Trash folder when set
 AGENT_DIRS = (".claude", ".claude.json", ".copilot")  # relative to the user's home
 CONFIG_FILE = ".nuff-hooks.json"  # relative to the user's home; outside the Write Zone on purpose
 
 PREFIX = "nuff-hooks: "
-WRITE_ZONE_TEXT = "the Write Zone is the Workspace, D:\\.slop-trash, the agent's home dirs and the temp dir"
-REMOVAL_HINT = (
-    "removals are moved to D:\\.slop-trash, but only a plain, standalone removal can be rewritten. "
-    "Send it as its own command with literal paths or wildcards, "
-    "e.g. `rm -rf <paths>` (bash) or `Remove-Item -Recurse -Force <paths>` (PowerShell)"
-)
 
 OUTSIDE = "<outside>"  # resolved path for UNC, device and unknown absolute paths
 
@@ -63,10 +62,39 @@ def _deny(reason: str) -> Decision:
     return Decision("deny", PREFIX + reason)
 
 
+def _p():
+    """Path rules of the platform the hook runs on."""
+    return ntpath if WINDOWS else posixpath
+
+
+def default_read_roots() -> tuple:
+    return WINDOWS_READ_ROOTS if WINDOWS else ()
+
+
+def trash_dir(ctx: Context) -> str:
+    """Trash: D:\\.slop-trash on Windows, ~/.slop-trash elsewhere."""
+    if TRASH:
+        return TRASH
+    return WINDOWS_TRASH if WINDOWS else posixpath.join(_home(ctx), POSIX_TRASH)
+
+
+def _write_zone_text(ctx: Context) -> str:
+    return f"the Write Zone is the Workspace, {trash_dir(ctx)}, the agent's home dirs and the temp dir"
+
+
+def _removal_hint(ctx: Context) -> str:
+    return (
+        f"removals are moved to {trash_dir(ctx)}, but only a plain, standalone removal can be rewritten. "
+        "Send it as its own command with literal paths or wildcards, "
+        "e.g. `rm -rf <paths>` (bash) or `Remove-Item -Recurse -Force <paths>` (PowerShell)"
+    )
+
+
 # --- paths and zones -------------------------------------------------------------------
 
 _VAR = re.compile(r"\$env:(\w+)|\$\{(?:env:)?(\w+)\}|\$(\w+)|%(\w+)%", re.IGNORECASE)
-_NULL_DEVICES = {"/dev/null", "nul", "nul:", "$null"}
+_STREAMS = {"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/stdin", "/dev/tty", "$null"}
+_WINDOWS_NULL = {"nul", "nul:"}  # a plain file name on POSIX
 _PIPELINE_VARS = re.compile(r"^\$(_|psitem|true|false|null)\b", re.IGNORECASE)
 
 
@@ -83,16 +111,30 @@ def _env(ctx: Context, name: str) -> str | None:
 
 
 def _home(ctx: Context) -> str:
+    name = "USERPROFILE" if WINDOWS else "HOME"
     for key, value in ctx.env.items():
-        if key.upper() == "USERPROFILE":
+        if key.upper() == name:
             return value
     return os.path.expanduser("~")
 
 
+def _is_stream(path: str) -> bool:
+    """A null device or standard stream, which is not a file."""
+    if WINDOWS:
+        return path.lower() in _STREAMS | _WINDOWS_NULL
+    return path in _STREAMS or path.lower() == "$null"  # POSIX paths are case-sensitive
+
+
 def _absolute(path: str, cwd: str, shell: str) -> str | None:
-    """Normalised absolute Windows path, OUTSIDE, or None for a null device."""
-    if path.lower() in _NULL_DEVICES:
+    """Normalised absolute path, OUTSIDE, or None for a null device."""
+    if _is_stream(path):
         return None
+    if not WINDOWS:
+        if shell == "powershell":
+            path = path.replace("\\", "/")  # PowerShell takes both separators
+        if not path.startswith("/"):
+            path = posixpath.join(cwd, path)
+        return "/" + posixpath.normpath(path).lstrip("/")  # `//x` is `/x` on Linux and macOS
     if path.startswith(("\\\\", "//")):
         drive = re.match(r"^//([A-Za-z])(?:/|$)(.*)", path) if shell == "bash" else None
         if not drive:
@@ -107,8 +149,8 @@ def _absolute(path: str, cwd: str, shell: str) -> str | None:
         else:
             return OUTSIDE  # Git Bash's own tree (/usr, /etc, ...) lives on C:
     if not re.match(r"^[A-Za-z]:[\\/]", path):
-        path = os.path.join(_absolute(cwd, "C:\\", "bash") or cwd, path)
-    return os.path.normpath(path)
+        path = ntpath.join(_absolute(cwd, "C:\\", "bash") or cwd, path)
+    return ntpath.normpath(path)
 
 
 def _var_name(match: re.Match) -> str:
@@ -138,7 +180,7 @@ def resolve(token: str, ctx: Context, cwd: str, shell: str) -> str | None:
 
 
 def _resolve_one(token: str, original: str, ctx: Context, cwd: str, shell: str) -> str | None:
-    if token.lower() in _NULL_DEVICES:
+    if _is_stream(token):
         return None
     if "$(" in token or "`" in token:
         raise _Deny(f"cannot check '{original}': it uses command substitution")
@@ -158,30 +200,35 @@ def _resolve_one(token: str, original: str, ctx: Context, cwd: str, shell: str) 
 def _under(path: str, root: str) -> bool:
     if path == OUTSIDE:
         return False
-    path = os.path.normcase(path)
-    root = os.path.normcase(_absolute(root, "C:\\", "bash") or root)
-    if root.endswith(os.sep):
+    paths = _p()
+    path = paths.normcase(path)
+    root = paths.normcase(_absolute(root, "C:\\" if WINDOWS else "/", "bash") or root)
+    if root.endswith(paths.sep):
         return path.startswith(root)
-    return path == root or path.startswith(root + os.sep)
+    return path == root or path.startswith(root + paths.sep)
 
 
 def _agent_and_temp(ctx: Context) -> list[str]:
     home = _home(ctx)
-    dirs = [os.path.join(home, name) for name in AGENT_DIRS]
-    dirs += [d for d in (_env(ctx, "TEMP"), _env(ctx, "TMP"), tempfile.gettempdir()) if d]
+    dirs = [_p().join(home, name) for name in AGENT_DIRS]
+    dirs += [d for d in (_env(ctx, "TEMP"), _env(ctx, "TMP"), _env(ctx, "TMPDIR"), tempfile.gettempdir()) if d]
     return dirs
 
 
 def config_path(ctx: Context) -> str:
-    return os.path.join(_home(ctx), CONFIG_FILE)
+    return _p().join(_home(ctx), CONFIG_FILE)
+
+
+def _read_config(path: str) -> str:
+    with open(path, encoding="utf-8-sig") as handle:
+        return handle.read()
 
 
 def _load_read_roots(ctx: Context) -> tuple[list[str], str]:
     """(Read Roots from the config file, error text). Any problem drops every configured root."""
     path = config_path(ctx)
     try:
-        with open(path, encoding="utf-8-sig") as handle:
-            data = json.load(handle)
+        data = json.loads(_read_config(path))
     except FileNotFoundError:
         return [], ""
     except (OSError, ValueError) as error:
@@ -192,9 +239,11 @@ def _load_read_roots(ctx: Context) -> tuple[list[str], str]:
     resolved = []
     for root in roots:
         expanded = _home(ctx) + root[1:] if root == "~" or root.startswith(("~/", "~\\")) else root
-        if not re.match(r"^[A-Za-z]:[\\/]", expanded):
-            return [], f"readRoots entry '{root}' in {path} is not an absolute path like C:\\DEV, so readRoots is ignored"
-        resolved.append(os.path.normpath(expanded))
+        absolute = re.match(r"^[A-Za-z]:[\\/]", expanded) if WINDOWS else expanded.startswith("/")
+        if not absolute:
+            example = "C:\\DEV" if WINDOWS else "/opt/src"
+            return [], f"readRoots entry '{root}' in {path} is not an absolute path like {example}, so readRoots is ignored"
+        resolved.append(ntpath.normpath(expanded) if WINDOWS else _absolute(expanded, "/", "file"))
     return resolved, ""
 
 
@@ -207,23 +256,23 @@ def read_roots(ctx: Context) -> list[str]:
 
 def _read_zone_text(ctx: Context) -> str:
     roots = read_roots(ctx)
-    text = "the Read Zone is the Workspace, D:\\, " + "".join(f"{root}, " for root in roots)
+    text = "the Read Zone is the Workspace, " + "".join(f"{root}, " for root in (*default_read_roots(), *roots))
     text += "the agent's home dirs and the temp dir"
     error = ctx.read_roots[1]
     return f"{text}; {error}" if error else f"{text}; more roots can be added to readRoots in {config_path(ctx)}"
 
 
 def in_read_zone(path: str, ctx: Context) -> bool:
-    roots = (ctx.workspace, *READ_ROOTS, *read_roots(ctx), *_agent_and_temp(ctx))
+    roots = (ctx.workspace, *default_read_roots(), *read_roots(ctx), *_agent_and_temp(ctx))
     return any(_under(path, root) for root in roots)
 
 
 def in_write_zone(path: str, ctx: Context) -> bool:
-    return any(_under(path, root) for root in (ctx.workspace, TRASH, *_agent_and_temp(ctx)))
+    return any(_under(path, root) for root in (ctx.workspace, trash_dir(ctx), *_agent_and_temp(ctx)))
 
 
-def in_trash(path: str) -> bool:
-    return _under(path, TRASH)
+def in_trash(path: str, ctx: Context) -> bool:
+    return _under(path, trash_dir(ctx))
 
 
 def _require_read(token: str, ctx: Context, cwd: str, shell: str) -> None:
@@ -235,7 +284,7 @@ def _require_read(token: str, ctx: Context, cwd: str, shell: str) -> None:
 def _require_write(token: str, ctx: Context, cwd: str, shell: str) -> None:
     for path in resolve_all(token, ctx, cwd, shell):
         if path is not None and not in_write_zone(path, ctx):
-            raise _Deny(f"writing '{token}' is not allowed: {WRITE_ZONE_TEXT}")
+            raise _Deny(f"writing '{token}' is not allowed: {_write_zone_text(ctx)}")
 
 
 # --- file tools ------------------------------------------------------------------------
@@ -276,7 +325,7 @@ def check_patch(patch: str, ctx: Context) -> Decision:
     def check() -> None:
         for action, path in _PATCH_FILE.findall(patch or ""):
             if action == "Delete File":
-                raise _Deny(f"apply_patch deletes are not allowed; {REMOVAL_HINT}")
+                raise _Deny(f"apply_patch deletes are not allowed; {_removal_hint(ctx)}")
             _require_write(path, ctx, ctx.cwd, "file")
 
     return _guard(check)
@@ -743,7 +792,7 @@ def _check_dotnet(command: str, ctx: Context, cwd: str) -> None:
         literals = [single.replace("''", "'") or double for single, double in _STRING.findall(args)]
         method = method.lower()
         if "delete" in method:
-            raise _Deny(f".NET deletes are not allowed; {REMOVAL_HINT}")
+            raise _Deny(f".NET deletes are not allowed; {_removal_hint(ctx)}")
         if not literals:
             continue
         if method.startswith("copy"):
@@ -836,7 +885,7 @@ def _check_segment(segment: Segment, shell: str, ctx: Context, cwd: str, depth: 
         found.removal, found.removal_cwd = segment, cwd
         return [cwd]
     if name == "robocopy" and any(arg.lower() in ("/mir", "/purge", "/mov", "/move") for arg in args):
-        raise _Deny(f"robocopy flags that delete files are not allowed; {REMOVAL_HINT}")
+        raise _Deny(f"robocopy flags that delete files are not allowed; {_removal_hint(ctx)}")
     if name == "find":
         return _check_find(args, ctx, cwd, shell, found)
 
@@ -896,11 +945,11 @@ def _check_find(args: list[str], ctx: Context, cwd: str, shell: str, found: _Fou
         i += 1
     expression = args[i:]
     if "-delete" in expression:
-        raise _Deny(f"`find -delete` is not allowed; {REMOVAL_HINT}")
+        raise _Deny(f"`find -delete` is not allowed; {_removal_hint(ctx)}")
     for j, token in enumerate(expression):
         if token in ("-exec", "-execdir", "-ok", "-okdir") and j + 1 < len(expression):
             if _name(expression[j + 1]) in REMOVALS:
-                raise _Deny(f"`find -exec rm` is not allowed; {REMOVAL_HINT}")
+                raise _Deny(f"`find -exec rm` is not allowed; {_removal_hint(ctx)}")
     return [cwd]
 
 
@@ -944,20 +993,20 @@ def _removal_targets(segment: Segment, shell: str) -> list[str] | None:
 
 
 def session_trash(ctx: Context) -> str:
-    """Trash folder of this session: TRASH\\<Workspace leaf name>\\<session id>."""
-    leaf = os.path.basename(os.path.normpath(ctx.workspace)) or "workspace"
+    """Trash folder of this session: <Trash>/<Workspace leaf name>/<session id>."""
+    leaf = _p().basename(_p().normpath(ctx.workspace)) or "workspace"
     session = re.sub(r"[^\w.-]", "_", ctx.session_id or "") or "unknown-session"
-    return os.path.join(TRASH, leaf, session)
+    return _p().join(trash_dir(ctx), leaf, session)
 
 
 def trash_path(source: str, ctx: Context) -> str:
     """Where a removed item goes: its original path, without the drive, under session_trash()."""
-    return os.path.join(session_trash(ctx), os.path.splitdrive(source)[1].lstrip("\\/"))
+    return _p().join(session_trash(ctx), _p().splitdrive(source)[1].lstrip("\\/"))
 
 
-def _clear_trash_copy(dest: str) -> None:
+def _clear_trash_copy(dest: str, ctx: Context) -> None:
     """A second removal of the same path overwrites the older copy in Trash."""
-    if not in_trash(dest) or not os.path.lexists(dest):
+    if not in_trash(dest, ctx) or not os.path.lexists(dest):
         return
     if os.path.isdir(dest) and not os.path.islink(dest):
         shutil.rmtree(dest)
@@ -966,7 +1015,9 @@ def _clear_trash_copy(dest: str) -> None:
 
 
 def _quote_bash(path: str) -> str:
-    return "'" + path.replace("\\", "/").replace("'", "'\\''") + "'"
+    if WINDOWS:
+        path = path.replace("\\", "/")  # a backslash is part of a file name on POSIX
+    return "'" + path.replace("'", "'\\''") + "'"
 
 
 def _quote_ps(text: str) -> str:
@@ -976,7 +1027,7 @@ def _quote_ps(text: str) -> str:
 def _rewrite(segment: Segment, shell: str, ctx: Context, cwd: str) -> Decision:
     tokens = _removal_targets(segment, shell)
     if tokens is None or not tokens:
-        return _deny(f"this removal can't be rewritten (unsupported flags or no paths); {REMOVAL_HINT}")
+        return _deny(f"this removal can't be rewritten (unsupported flags or no paths); {_removal_hint(ctx)}")
     sources: list[str] = []
     for token in tokens:
         path = resolve(token, ctx, cwd, shell)
@@ -986,12 +1037,12 @@ def _rewrite(segment: Segment, shell: str, ctx: Context, cwd: str) -> Decision:
         if not matches:
             matches = [path]  # a literal name, or a name that only looks like a wildcard
         for match in matches:
-            match = os.path.normpath(match)
-            if in_trash(match):
-                raise _Deny("removing anything inside D:\\.slop-trash is not allowed; only the user empties Trash")
+            match = _p().normpath(match)
+            if in_trash(match, ctx):
+                raise _Deny(f"removing anything inside {trash_dir(ctx)} is not allowed; only the user empties Trash")
             if not in_write_zone(match, ctx):
-                raise _Deny(f"removing '{token}' is not allowed: {WRITE_ZONE_TEXT}")
-            if os.path.normcase(match) == os.path.normcase(os.path.normpath(ctx.workspace)):
+                raise _Deny(f"removing '{token}' is not allowed: {_write_zone_text(ctx)}")
+            if _p().normcase(match) == _p().normcase(_p().normpath(ctx.workspace)):
                 raise _Deny("removing the Workspace itself is not allowed")
             if os.path.lexists(match) and match not in sources:
                 sources.append(match)
@@ -1005,9 +1056,9 @@ def _rewrite(segment: Segment, shell: str, ctx: Context, cwd: str) -> Decision:
     steps = []
     for source in sources:
         dest = trash_path(source, ctx)
-        _clear_trash_copy(dest)
+        _clear_trash_copy(dest, ctx)
         # The rewritten command holds no removal of its own: agents see it and may send it again.
-        parent = os.path.dirname(dest)
+        parent = _p().dirname(dest)
         if shell == "bash":
             steps.append(f"mkdir -p {_quote_bash(parent)} && mv -f -- {_quote_bash(source)} {_quote_bash(dest)}")
         else:
@@ -1019,7 +1070,7 @@ def _rewrite(segment: Segment, shell: str, ctx: Context, cwd: str) -> Decision:
         command = " && ".join(steps + [f"echo {_quote_bash(message)}"])
     else:
         command = "$ErrorActionPreference = 'Stop'; " + "; ".join(steps + [f"Write-Output {_quote_ps(message)}"])
-    return Decision("rewrite", PREFIX + "removal rewritten into a move to D:\\.slop-trash", command)
+    return Decision("rewrite", PREFIX + f"removal rewritten into a move to {trash_dir(ctx)}", command)
 
 
 # --- entry point for shell tools -------------------------------------------------------
@@ -1031,11 +1082,11 @@ def check_shell(command: str, shell: str, ctx: Context) -> Decision:
     try:
         segments, found = _check_command(command, shell, ctx, ctx.cwd, depth=0)
         if found.nested_removal:
-            return _deny(REMOVAL_HINT)
+            return _deny(_removal_hint(ctx))
         if not found.removal:
             return ALLOW
         if len(segments) != 1 or found.removal.redirects:
-            return _deny(REMOVAL_HINT)
+            return _deny(_removal_hint(ctx))
         return _rewrite(found.removal, shell, ctx, found.removal_cwd)
     except _Deny as denied:
         return _deny(str(denied))
