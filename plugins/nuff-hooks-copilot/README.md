@@ -6,7 +6,7 @@ Good enough guardrail hooks for **GitHub Copilot CLI only**: they use the Copilo
 
 - **Workspace** — the project directory the agent session started in (`COPILOT_PROJECT_DIR`, else the working directory), and everything below it. For a session in a git worktree, that is the worktree root.
 - **Agent Dirs** — the agent's own home configuration: `~/.claude`, `~/.claude.json` and `~/.copilot`.
-- **Temp** — the OS temp directory (`TEMP` / `TMP` / `TMPDIR`), including the agent's scratchpad inside it.
+- **Temp** — the OS temp directory (`TEMP` / `TMP` / `TMPDIR`, plus `/tmp` on Linux and macOS), including the agent's scratchpad inside it.
 - **Read Roots** — extra directories you let the agent read, listed in `~/.nuff-hooks.json` (see [Read Roots](#read-roots)).
 - **Read Zone** — everywhere the agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp.
 - **Write Zone** — everywhere the agent may write: the Workspace, Trash, Agent Dirs and Temp.

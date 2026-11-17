@@ -25,6 +25,7 @@ WINDOWS = os.name == "nt"  # Windows paths and defaults; else POSIX (Linux, macO
 WINDOWS_READ_ROOTS = ("D:\\",)  # POSIX has no default extra Read Roots
 WINDOWS_TRASH = "D:\\.slop-trash"
 POSIX_TRASH = ".slop-trash"  # relative to the user's home
+POSIX_TEMP = ("/tmp", "/private/tmp")  # always Temp on POSIX: macOS points TMPDIR elsewhere
 TRASH = None  # overrides the platform's Trash folder when set
 AGENT_DIRS = (".claude", ".claude.json", ".copilot")  # relative to the user's home
 CONFIG_FILE = ".nuff-hooks.json"  # relative to the user's home; outside the Write Zone on purpose
@@ -211,8 +212,11 @@ def _under(path: str, root: str) -> bool:
 def _agent_and_temp(ctx: Context) -> list[str]:
     home = _home(ctx)
     dirs = [_p().join(home, name) for name in AGENT_DIRS]
-    dirs += [d for d in (_env(ctx, "TEMP"), _env(ctx, "TMP"), _env(ctx, "TMPDIR"), tempfile.gettempdir()) if d]
-    return dirs
+    temps = [d for d in (_env(ctx, "TEMP"), _env(ctx, "TMP"), _env(ctx, "TMPDIR"), tempfile.gettempdir()) if d]
+    if not WINDOWS:
+        temps += POSIX_TEMP
+        temps += ["/private" + d for d in temps if d.startswith("/var/")]  # macOS: /var is /private/var
+    return dirs + temps
 
 
 def config_path(ctx: Context) -> str:

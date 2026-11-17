@@ -52,7 +52,7 @@ class PosixCase(unittest.TestCase):
 
     def setUp(self):
         patch(self, mock.patch.object(core, "WINDOWS", False),
-              mock.patch.object(core.tempfile, "gettempdir", return_value="/tmp"))
+              mock.patch.object(core.tempfile, "gettempdir", return_value=POSIX_TMPDIR))
         configure(self, None)
 
 
@@ -390,11 +390,12 @@ class Rewrite(unittest.TestCase):
 
 
 POSIX_HOME = "/home/me"
+POSIX_TMPDIR = "/var/folders/xy/T/"  # macOS; gettempdir() follows TMPDIR
 POSIX_WORKSPACE = "/home/me/work/proj"
 
 
 def posix_ctx(workspace=POSIX_WORKSPACE, cwd=None, env=None):
-    base = {"HOME": POSIX_HOME, "TMPDIR": "/var/folders/xy/T/", "PROJ": POSIX_WORKSPACE}
+    base = {"HOME": POSIX_HOME, "TMPDIR": POSIX_TMPDIR, "PROJ": POSIX_WORKSPACE}
     return core.Context(workspace=workspace, cwd=cwd or workspace, session_id="sess-1", env=env or base)
 
 
@@ -408,6 +409,9 @@ class Posix(PosixCase):
             POSIX_HOME + "/.ssh/id_rsa": "deny",
             "/tmp/claude-0/scratch/x": "allow",
             "/var/folders/xy/T/x": "allow",
+            "/private/var/folders/xy/T/x": "allow",
+            "/private/tmp/x": "allow",
+            "/var/folders/other/x": "deny",
             "//etc/passwd": "deny",
             "src/../../other/x": "deny",
             "D:\\other\\x": "allow",  # a file named so inside the Workspace

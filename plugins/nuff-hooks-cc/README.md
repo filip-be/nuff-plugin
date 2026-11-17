@@ -6,7 +6,7 @@ Good enough guardrail hooks for **Claude Code only**: they use Claude Code's hoo
 
 - **Workspace** — the project directory the agent session started in (`CLAUDE_PROJECT_DIR`, else the working directory), and everything below it. For a session in a git worktree, that is the worktree root.
 - **Agent Dirs** — the agent's own home configuration: `~/.claude`, `~/.claude.json` and `~/.copilot`.
-- **Temp** — the OS temp directory (`TEMP` / `TMP` / `TMPDIR`), including the agent's scratchpad inside it.
+- **Temp** — the OS temp directory (`TEMP` / `TMP` / `TMPDIR`, plus `/tmp` on Linux and macOS), including the agent's scratchpad inside it.
 - **Read Roots** — extra directories you let the agent read, listed in `~/.nuff-hooks.json` (see [Read Roots](#read-roots)).
 - **Read Zone** — everywhere the agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp.
 - **Write Zone** — everywhere the agent may write: the Workspace, Trash, Agent Dirs and Temp.
@@ -53,6 +53,7 @@ On Linux and macOS the Read Zone has no default extra root, so system paths such
 ## Prerequisites
 
 - Python 3.10+: on Windows the `py` launcher (`py -3 --version`), on Linux and macOS `python3` on `PATH` (`python3 --version`). The hook uses `py` when it finds it, else `python3`; with neither, every checked call is denied.
+- On Windows, Git Bash. Claude Code runs this hook's command in Git Bash; without Git Bash it falls back to PowerShell, where the command does not parse, so every checked call is blocked.
 
 ## Known gaps
 
