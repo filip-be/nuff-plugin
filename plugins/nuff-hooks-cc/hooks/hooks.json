@@ -6,7 +6,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_hooks_cc.py\"",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_hooks_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_hooks_cc.py\"; else echo 'nuff-hooks: Python 3 not found, call denied' >&2; exit 2; fi",
                         "timeout": 15
                     }
                 ]

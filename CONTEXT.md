@@ -73,15 +73,15 @@ The OS temp directory, including the agent's scratchpad inside it.
 _Avoid_: scratch
 
 **Trash**:
-The folder `D:\.slop-trash`, where removed files are kept instead of being deleted.
+The folder where removed files are kept instead of being deleted: `D:\.slop-trash` on Windows, `~/.slop-trash` on Linux and macOS.
 _Avoid_: recycle bin, bin
 
 **Read Roots**:
-Extra directories the user lets agents read, listed under `readRoots` in `~/.nuff-hooks.json` (e.g. `C:\DEV` on a machine whose projects are not on `D:\`). The file sits outside the Write Zone, so an agent can't widen its own Read Zone.
+Extra directories the user lets agents read, listed under `readRoots` in `~/.nuff-hooks.json` (e.g. `C:\DEV` on a Windows machine whose projects are not on `D:\`, or `/opt/src` on Linux). The file sits outside the Write Zone, so an agent can't widen its own Read Zone.
 _Avoid_: allowlist, read paths
 
 **Read Zone**:
-Everywhere an agent may read: the Workspace, the `D:\` drive, Read Roots, Agent Dirs and Temp.
+Everywhere an agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp.
 
 **Write Zone**:
 Everywhere an agent may write: the Workspace, Trash, Agent Dirs and Temp.
