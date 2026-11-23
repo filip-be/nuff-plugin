@@ -4,54 +4,51 @@ A plugin marketplace for AI coding assistants — **Claude Code** and **GitHub C
 
 ## Available plugins
 
-### [nuff](./plugins/nuff)
+### [nuff-skills](./plugins/nuff-skills)
 
-> Take an Azure DevOps work item and do _enough_ work to get it done.
+Set of skills that are good enough to improve your day-to-day AI workflow (initially, a fork of [mattpocock/skills](https://github.com/mattpocock/skills)): grilling, domain modeling, adversarial review and pull request descriptions.
 
-**nuff** turns Azure DevOps work items into implemented, verified code through a structured four-phase pipeline:
+The workflow is three steps: **grill** the idea into a plan, **implement** it, open the **PR**. Before you see the plan or the finished code, a model from a different provider reviews it in a loop until it has no findings left.
 
+```mermaid
+flowchart TD
+    subgraph grill["1 · Grill"]
+        direction TB
+        Ask["Interview in rounds<br/>until no decision is open"] --> PlanReview{{"Plan review"}}
+        PlanReview -->|"findings that need<br/>your decision"| Ask
+        PlanReview -->|"no findings left"| Save["Save .agents/PLAN.md"]
+        Save --> Approve["You approve the plan"]
+    end
+
+    Approve -.->|"/clear, then /implement-plan"| Build
+
+    subgraph implement["2 · Implement"]
+        direction TB
+        Build["Build the plan<br/>and commit"] --> CodeReview{{"Code review"}}
+        CodeReview -->|"findings"| Fix["Fix in a new commit<br/>or reject with a reason"]
+        Fix --> CodeReview
+        CodeReview -->|"no findings left"| Done["Report the work as done"]
+    end
+
+    Done --> Describe
+
+    subgraph pr["3 · PR"]
+        Describe["Short opener on top,<br/>full description collapsed"]
+    end
+
+    classDef review fill:#e7edfc,stroke:#2e5bd6,color:#1b2130
+    class PlanReview,CodeReview review
 ```
-Azure DevOps Work Item
-        │
-        ▼
-   ┌─────────┐     Clarify requirements,
-   │  Refine │ ──► identify gaps, produce SPEC.md
-   └────┬────┘
-        │  ✓ User approves spec
-        ▼
-   ┌─────────┐     Decompose into tasks,
-   │   Plan  │ ──► map to files, produce PLAN.md
-   └────┬────┘
-        │  ✓ User approves plan
-        ▼
-   ┌─────────┐     Implement tasks, verify against spec,
-   │   Code  │ ──► fix issues, mark SPEC.md requirements
-   └────┬────┘
-        │  ✓ Code verified
-        ▼
-   ┌─────────┐     Review reflections + lessons learned,
-   │ Improve │ ──► update AGENTS.md and knowledge base
-   └─────────┘
-```
 
-**Key commands:**
+| Step | You run | What happens |
+| ---- | ------- | ------------ |
+| Grill | `/grill-me` | The agent interviews you until no design decision is open, keeping your `CONTEXT.md` and ADRs up to date. The **plan review loop** runs on its own, then the plan is saved to `.agents/PLAN.md` for your approval. |
+| Implement | `/clear`, then `/implement-plan` | The agent builds the plan and commits it. The **code review loop** runs before the work is reported as done. |
+| PR | nothing | `pr-description` writes a short opener with the agent's full description collapsed below it. |
 
-| Command                     | Description                                          |
-| --------------------------- | ---------------------------------------------------- |
-| `/do.nuff 12345`            | Run the full interactive workflow for a work item    |
-| `/do-everything.nuff 12345` | Autonomous end-to-end run (no user interaction)      |
-| `/improve.nuff 12345`       | Run just the improve phase for a completed work item |
-| `/configure.nuff`           | Configure nuff settings and model selection          |
+**Clear the context once**, after approving the plan: `.agents/PLAN.md` holds everything the implementation needs. Don't clear during grilling, because open decisions live only in the conversation until the plan is saved.
 
-See the [nuff README](./plugins/nuff/README.md) for full documentation.
-
-### nuff-skills
-
-Set of skills that are good enough to improve your AI workflow (initially, a fork of [mattpocock/skills](https://github.com/mattpocock/skill)).
-
-Grilling, domain modeling, adversarial review.
-
-See the [nuff-skills](./plugins/nuff-skills/README.md) README` for full documentation.
+See the [nuff-skills README](./plugins/nuff-skills/README.md) for the review loops, the reviewer models and the full list of skills.
 
 ### nuff-hooks-cc / nuff-hooks-copilot
 
@@ -69,13 +66,20 @@ Good enough mods for **Claude Code only**. First mod: open the current session's
 
 See the [nuff-cc README](./plugins/nuff-cc/README.md) for details.
 
+### [nuff](./plugins/nuff) (deprecated)
+
+> [!WARNING]
+> **nuff is deprecated.** Its four-phase Azure DevOps pipeline (Refine → Plan → Code → Improve, with `/do.nuff` and `/do-everything.nuff`) turned out to be too heavy for day-to-day work. It has been replaced by [nuff-skills](#nuff-skills), which keeps the useful parts (sharpening the plan with you, independent review of plan and code) in three lightweight steps.
+
+The plugin is still listed in the marketplace for existing users. See the [nuff README](./plugins/nuff/README.md) for its documentation.
+
 ## Installation
 
 ### Claude Code (CLI)
 
 1. Open Claude Code and navigate to the Plugins section via `/plugin`
 2. Add `nuff-plugin` as new marketplace
-3. Browse marketplace plugins and install desired ones (e.g. nuff)
+3. Browse marketplace plugins and install desired ones (e.g. nuff-skills)
 
 To update plugins installed from the marketplace, use `/plugin` command to check for updates and apply them. You can also manage plugins (e.g. uninstall, view details) from the same interface.
 
@@ -84,8 +88,8 @@ To update plugins installed from the marketplace, use `/plugin` command to check
 1. Open Copilot CLI
 2. See available commands via `/plugin`
 3. Install plugin marketplace via `/plugin marketplace add nuff-plugin`
-4. Install desired plugins from the marketplace, e.g. `/plugin install nuff@nuff-plugin`
-5. To update plugins installed from the marketplace, use `/plugin update nuff@nuff-plugin` to check for updates and apply them.
+4. Install desired plugins from the marketplace, e.g. `/plugin install nuff-skills@nuff-plugin`
+5. To update plugins installed from the marketplace, use `/plugin update nuff-skills@nuff-plugin` to check for updates and apply them.
 
 ### GitHub Copilot Chat in VS Code
 
@@ -96,7 +100,7 @@ As of 2025-03-13, Chat Plugins as in Preview and Plugins Marketplace is an exper
 3. Enable ` Chat > Plugins: Enable` setting
 4. Add `nuff-plugin` as new marketplace in the `Chat > Plugins:Marketplaces`
 
-Once done, you can go to Extensions view and search plugins via `@agentPlugins` filter, e.g. `@agentPlugins nuff` to find the nuff plugin and install it.
+Once done, you can go to Extensions view and search plugins via `@agentPlugins` filter, e.g. `@agentPlugins nuff-skills` to find the nuff-skills plugin and install it.
 
 Plugins should be updated as standard VS Code extensions as per [microsoft/vscode: Test: plugin support](https://github.com/microsoft/vscode/issues/301158).
 
