@@ -1,7 +1,7 @@
 {
     "name": "nuff",
     "version": "1.12.2",
-    "description": "Take Azure DevOps work item as an input and do enough work to get it done.",
+    "description": "Deprecated, no longer developed: takes an Azure DevOps work item as input and does enough work to get it done.",
     "homepage": "https://github.com/filip-be/nuff-plugin",
     "repository": "https://github.com/filip-be/nuff-plugin",
     "license": "MIT",

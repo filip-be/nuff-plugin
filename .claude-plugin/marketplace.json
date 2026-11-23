@@ -11,12 +11,12 @@
     {
       "name": "nuff",
       "source": "./plugins/nuff",
-      "description": "Take Azure DevOps work item as an input and do enough work to get it done."
+      "description": "Deprecated, replaced by nuff-skills: takes an Azure DevOps work item as input and does enough work to get it done."
     },
     {
       "name": "nuff-skills",
       "source": "./plugins/nuff-skills",
-      "description": "Nuff skills (good enough skills)."
+      "description": "Good enough skills for day-to-day AI work: grill an idea into a plan, implement it and open the pull request, with a model from another provider reviewing both the plan and the code in a loop."
     },
     {
       "name": "nuff-hooks-cc",

@@ -2,6 +2,16 @@
 
 Plugins and skills that help an AI agent do just enough work, of good enough quality, with as little human babysitting as possible.
 
+## Workflow
+
+**Workflow**:
+The three steps day-to-day work goes through: a Grilling session that ends in an approved Plan file, implementation of that plan ending in a Code review, and a pull request led by an Opener.
+_Avoid_: Pipeline, phases
+
+**Plan file**:
+The plan a Grilling session saves to `.agents/PLAN.md` once its Plan review has ended; implementation starts from it alone, so the context can be cleared before implementing.
+_Avoid_: Spec, PLAN
+
 ## Grilling
 
 **Grilling session**:
@@ -15,7 +25,7 @@ _Avoid_: Sign-off, approval
 ## Adversarial review
 
 **Adversarial review**:
-An independent check of the agent's work by a Reviewer — from a different model provider when available — looped until the Reviewer has no Findings left or the round cap is hit.
+An independent check of the agent's work by a Reviewer — from a different model provider when available — looped until the Reviewer has no Findings left or only Open findings remain.
 _Avoid_: Peer review, second opinion
 
 **Reviewer**:
@@ -43,8 +53,12 @@ A decision taken during implementation that departs from the original plan.
 _Avoid_: Deviation, change of plan
 
 **Review round**:
-One Reviewer pass plus the agent's response to its Findings; a review stops after three rounds and hands what is left to the user.
+One Reviewer pass plus the agent's response to its Findings. There is no round limit.
 _Avoid_: Iteration, pass
+
+**Open finding**:
+A Finding the Reviewer maintained after the agent rejected it, with neither side having a new argument; it ends the review and goes to the user to decide.
+_Avoid_: Deadlock, unresolved issue
 
 ## PR description
 
