@@ -26,7 +26,7 @@ flowchart TD
         CodeReview -->|"no findings left"| Done["Report the work as done"]
     end
 
-    Done --> Describe
+    Done -->|"you ask for a PR"| Describe
 
     subgraph pr["3 · PR"]
         Describe["Short opener on top,<br/>full description collapsed"]
@@ -38,7 +38,7 @@ flowchart TD
 
 1. **Grill.** Run `/grill-me`. The agent interviews you in rounds until no design decision is left open. It looks up facts itself and asks you only for decisions. Domain terms and decisions go into your project's `CONTEXT.md` and ADRs as they come up. When nothing is left open, the plan review starts on its own. Once it ends, the plan is saved to `.agents/PLAN.md` and you approve it.
 2. **Implement.** Run `/clear`, then `/implement-plan`. The agent builds the plan and commits it. The plan's last step runs the code review, before the work is reported as done.
-3. **PR.** `pr-description` runs on its own whenever the agent opens or edits a pull request.
+3. **PR.** Ask the agent to open a pull request. `pr-description` then runs on its own and writes the description; it also runs whenever the agent edits one.
 
 ### Review loops
 

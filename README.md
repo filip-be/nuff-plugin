@@ -30,7 +30,7 @@ flowchart TD
         CodeReview -->|"no findings left"| Done["Report the work as done"]
     end
 
-    Done --> Describe
+    Done -->|"you ask for a PR"| Describe
 
     subgraph pr["3 · PR"]
         Describe["Short opener on top,<br/>full description collapsed"]
@@ -44,7 +44,7 @@ flowchart TD
 | ---- | ------- | ------------ |
 | Grill | `/grill-me` | The agent interviews you until no design decision is open, keeping your `CONTEXT.md` and ADRs up to date. The **plan review loop** runs on its own, then the plan is saved to `.agents/PLAN.md` for your approval. |
 | Implement | `/clear`, then `/implement-plan` | The agent builds the plan and commits it. The **code review loop** runs before the work is reported as done. |
-| PR | nothing | `pr-description` writes a short opener with the agent's full description collapsed below it. |
+| PR | ask the agent to open a PR | `pr-description` writes a short opener with the agent's full description collapsed below it. |
 
 **Clear the context once**, after approving the plan: `.agents/PLAN.md` holds everything the implementation needs. Don't clear during grilling, because open decisions live only in the conversation until the plan is saved.
 
