@@ -6,7 +6,7 @@ A plugin marketplace for AI coding assistants — **Claude Code** and **GitHub C
 
 ### [nuff-skills](./plugins/nuff-skills)
 
-Set of skills that are good enough to improve your day-to-day AI workflow (initially, a fork of [mattpocock/skills](https://github.com/mattpocock/skills)): grilling, domain modeling, adversarial review and pull request descriptions.
+Set of skills that are good enough to improve your day-to-day AI workflow (initially, a fork of [mattpocock/skills](https://github.com/mattpocock/skills)).
 
 The workflow is three steps: **grill** the idea into a plan, **implement** it, open the **PR**. Before you see the plan or the finished code, a model from a different provider reviews it in a loop until it has no findings left.
 
