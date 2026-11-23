@@ -10,45 +10,7 @@ Set of skills that are good enough to improve your day-to-day AI workflow (initi
 
 The workflow is three steps: **grill** the idea into a plan, **implement** it, open the **PR**. Before you see the plan or the finished code, a model from a different provider reviews it in a loop until it has no findings left.
 
-```mermaid
-flowchart TD
-    subgraph grill["1 · Grill"]
-        direction TB
-        Ask["Interview in rounds<br/>until no decision is open"] --> PlanReview{{"Plan review"}}
-        PlanReview -->|"findings that need<br/>your decision"| Ask
-        PlanReview -->|"no findings left"| Save["Save .agents/PLAN.md"]
-        Save --> Approve["You approve the plan"]
-    end
-
-    Approve -.->|"/clear, then /implement-plan"| Build
-
-    subgraph implement["2 · Implement"]
-        direction TB
-        Build["Build the plan<br/>and commit"] --> CodeReview{{"Code review"}}
-        CodeReview -->|"findings"| Fix["Fix in a new commit<br/>or reject with a reason"]
-        Fix --> CodeReview
-        CodeReview -->|"no findings left"| Done["Report the work as done"]
-    end
-
-    Done -->|"you ask for a PR"| Describe
-
-    subgraph pr["3 · PR"]
-        Describe["Short opener on top,<br/>full description collapsed"]
-    end
-
-    classDef review fill:#e7edfc,stroke:#2e5bd6,color:#1b2130
-    class PlanReview,CodeReview review
-```
-
-| Step | You run | What happens |
-| ---- | ------- | ------------ |
-| Grill | `/grill-me` | The agent interviews you until no design decision is open, keeping your `CONTEXT.md` and ADRs up to date. The **plan review loop** runs on its own, then the plan is saved to `.agents/PLAN.md` for your approval. |
-| Implement | `/clear`, then `/implement-plan` | The agent builds the plan and commits it. The **code review loop** runs before the work is reported as done. |
-| PR | ask the agent to open a PR | `pr-description` writes a short opener with the agent's full description collapsed below it. |
-
-**Clear the context once**, after approving the plan: `.agents/PLAN.md` holds everything the implementation needs. Don't clear during grilling, because open decisions live only in the conversation until the plan is saved.
-
-See the [nuff-skills README](./plugins/nuff-skills/README.md) for the review loops, the reviewer models and the full list of skills.
+See the [nuff-skills README](./plugins/nuff-skills/README.md) for the workflow diagram, the review loops, when to clear the context and the full list of skills.
 
 ### nuff-hooks-cc / nuff-hooks-copilot
 
