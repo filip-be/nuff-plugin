@@ -1,7 +1,7 @@
 {
     "name": "nuff-skills",
-    "version": "1.0.10",
-    "description": "Nuff skills (good enough skills).",
+    "version": "1.0.11",
+    "description": "Good enough skills for day-to-day AI work: grill an idea into a plan, implement it and open the pull request, with a model from another provider reviewing both the plan and the code in a loop.",
     "author": {
         "name": "filip-be"
     },
