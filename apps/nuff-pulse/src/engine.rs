@@ -21,6 +21,10 @@ pub const RESCAN_EVERY: f64 = 60.0;
 pub const HOUSEKEEPING_EVERY: f64 = 3600.0;
 /// Pulse Files of sessions that ended this long ago are deleted.
 pub const PULSE_ENDED_TTL: f64 = 24.0 * 3600.0;
+/// A whole-read file whose mtime is younger than this can still change
+/// without changing its stamp (same size, same coarse mtime tick), so its
+/// stamp is not trusted yet and the next check reads it again.
+pub const STAMP_SETTLE: f64 = 2.0;
 /// Pulse Files untouched this long are deleted whatever they say.
 pub const PULSE_STALE_TTL: f64 = 7.0 * 24.0 * 3600.0;
 
@@ -445,7 +449,8 @@ impl Engine {
     /// The text of a small file when it changed since the last read.
     fn read_whole(&mut self, root: usize, path: &Path, fref: &FileRef) -> Option<String> {
         let meta = std::fs::metadata(path).ok()?;
-        let stamp = (meta.len(), meta.modified().map(util::unix).unwrap_or(0.0));
+        let mtime = meta.modified().map(util::unix).unwrap_or(0.0);
+        let stamp = (meta.len(), mtime);
         let t = self.files.entry(path.to_path_buf()).or_insert_with(|| Tracked {
             root,
             fref: fref.clone(),
@@ -456,7 +461,8 @@ impl Engine {
             return None;
         }
         let text = std::fs::read_to_string(path).ok()?;
-        t.stamp = Some(stamp);
+        let settled = util::unix(std::time::SystemTime::now()) - mtime >= STAMP_SETTLE;
+        t.stamp = settled.then_some(stamp);
         Some(text)
     }
 

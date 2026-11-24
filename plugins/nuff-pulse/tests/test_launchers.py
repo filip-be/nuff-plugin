@@ -106,9 +106,16 @@ class Launchers(unittest.TestCase):
                 if not exe:
                     self.skipTest(f"{shell} not installed")
                 # Keep the shell itself reachable on PATH, but no Python launcher.
-                path = str(empty) if shell == "sh" and os.name != "nt" else os.pathsep.join(
-                    [str(empty), str(Path(exe).parent)])
-                if os.name == "nt" and (shutil.which("py", path=path) or shutil.which("python3", path=path)):
+                if os.name == "nt":
+                    path = os.pathsep.join([str(empty), str(Path(exe).parent)])
+                else:
+                    # The shell's own folder (often /usr/bin) holds python3 too:
+                    # link only the shell itself.
+                    link = empty / Path(exe).name
+                    if not link.exists():
+                        link.symlink_to(os.path.realpath(exe))
+                    path = str(empty)
+                if shutil.which("py", path=path) or shutil.which("python3", path=path):
                     self.skipTest("Python sits next to the shell")
                 result = self.run_command(shell, command, variable, root, payload, path=path)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

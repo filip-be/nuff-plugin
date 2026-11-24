@@ -40,8 +40,8 @@ impl Canvas {
         let a = a.min(1.0);
         let da = self.px[i + 3] as f32 / 255.0;
         let out_a = a + da * (1.0 - a);
-        for c in 0..3 {
-            let src = color[c] as f32;
+        for (c, &src) in color.iter().enumerate() {
+            let src = src as f32;
             let dst = self.px[i + c] as f32;
             self.px[i + c] = ((src * a + dst * da * (1.0 - a)) / out_a.max(1e-6)).round() as u8;
         }

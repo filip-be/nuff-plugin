@@ -213,7 +213,11 @@ fn claude_transcript_hooks_and_status() {
 
     // `/clear`: the same process now runs another session.
     let other = "99999999-2222-3333-4444-555555555555";
+    // Same size, and on a coarse clock (Windows) the same mtime as the read
+    // above: pin the mtime so every platform sees that stamp.
+    let mtime = std::fs::metadata(&status).unwrap().modified().unwrap();
     std::fs::write(&status, format!(r#"{{"pid":900,"sessionId":"{other}","status":"idle","statusUpdatedAt":{}}}"#, ((last + 4.0) * 1000.0) as u64)).unwrap();
+    std::fs::OpenOptions::new().write(true).open(&status).unwrap().set_modified(mtime).unwrap();
     e.poll(last + 130.0); // next rescan re-reads the status file
     assert!(e.model.sessions[&k].status.is_none());
     assert_eq!(e.model.sessions[&key(Runtime::Claude, other)].status.as_ref().unwrap().pid, 900);
