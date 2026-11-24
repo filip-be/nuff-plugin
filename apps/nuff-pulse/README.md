@@ -96,7 +96,7 @@ pwsh tools/measure.ps1 -Idle
 
 ## Releasing
 
-CI (`.github/workflows/nuff-pulse.yml`) runs the tests, clippy and a release build on every change to the widget or its hook plugins. To release:
+CI (`.github/workflows/nuff-pulse.yml`) checks formatting (`cargo fmt --check`) and runs the tests, clippy and a release build on every change to the widget or its hook plugins. To release:
 
 1. Set `version` in `Cargo.toml`, run `cargo build` so `Cargo.lock` follows, rename `## Unreleased` in `CHANGELOG.md` to `## <version>` and commit all three. CI builds with `--locked` and the release job needs that CHANGELOG section, so a tag without them fails before anything is published.
 2. Push a tag `apps/nuff-pulse/v<version>`. CI checks that the tag matches `Cargo.toml`, builds the exe and publishes a GitHub release with `nuff-pulse-<version>-windows-x64.zip` (exe, README, CHANGELOG, licence), its SHA-256 and the CHANGELOG section as notes.
