@@ -309,7 +309,8 @@ impl CopilotLog {
                 if let Some(m) = util::s(usage, "model") {
                     self.model = Some(m.to_string());
                 }
-                self.last_request_model = util::s(usage, "model").map(str::to_string);
+                // Without `usage.model` the request ran on the selected model.
+                self.last_request_model = self.model.clone();
                 if let Some(mp) = util::u(usage, "maxPromptTokens") {
                     self.max_prompt_tokens = Some(mp);
                 }

@@ -36,6 +36,8 @@ pub struct Chunk {
     pub lines: Vec<String>,
     /// True when the file shrank or was replaced and was re-read from the start.
     pub reset: bool,
+    /// True when bytes between `head` and `lines` were not read.
+    pub skipped: bool,
 }
 
 #[derive(Debug)]
@@ -103,6 +105,7 @@ impl Tailer {
                     let anchored = self.anchors.is_empty()
                         || lines.iter().any(|l| self.anchors.iter().any(|a| l.contains(a)));
                     if anchored || start == cut || window >= MAX_TAIL_BYTES {
+                        chunk.skipped = start > cut;
                         chunk.lines = lines;
                         return Ok(chunk);
                     }
@@ -223,6 +226,7 @@ mod tests {
         let mut t = Tailer::new(&p);
         let c = t.read().unwrap();
         assert_eq!(c.head[0].trim(), "first");
+        assert!(c.skipped);
         assert_eq!(c.head.len() as u64, HEAD_BYTES / 100);
         assert_eq!(c.lines.last().unwrap().trim(), "last");
         // The window starts inside a line, which is dropped.
@@ -250,6 +254,7 @@ mod tests {
         let mut t = Tailer::with_anchors(&p, &["ANCHOR"]);
         let c = t.read().unwrap();
         assert!(c.lines.iter().any(|l| l.contains("ANCHOR")));
+        assert!(!c.skipped, "the window grew back to the head");
         // Head and tail never overlap.
         assert_eq!(c.head.len() + c.lines.len(), 13_001);
         let mut plain = Tailer::new(&p);

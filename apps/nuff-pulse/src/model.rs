@@ -93,6 +93,8 @@ pub struct Session {
     pub history: VecDeque<(f64, State)>,
     /// Modification time of the session's log when last read.
     pub log_mtime: Option<f64>,
+    /// When the session's process started another session (Claude `/clear`).
+    pub cleared_t: Option<f64>,
 }
 
 impl Session {
@@ -136,6 +138,11 @@ impl Session {
                 }
                 _ => next,
             });
+        }
+        if let Some(c) = self.cleared_t {
+            if cur.as_ref().is_none_or(|x| x.t <= c && x.state != State::Ended) {
+                cur = Some(Sig { t: c, state: State::Ended, reason: Some("cleared".into()), detail: None, provisional: false });
+            }
         }
         if self.live == Liveness::NotLive && cur.as_ref().is_none_or(|c| c.state != State::Ended) {
             let t = cur.as_ref().map_or(self.live_t, |c| c.t.max(self.live_t));

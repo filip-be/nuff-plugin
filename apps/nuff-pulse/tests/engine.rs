@@ -217,11 +217,10 @@ fn claude_transcript_hooks_and_status() {
     e.poll(last + 130.0); // next rescan re-reads the status file
     assert!(e.model.sessions[&k].status.is_none());
     assert_eq!(e.model.sessions[&key(Runtime::Claude, other)].status.as_ref().unwrap().pid, 900);
+    let row = e.model.row(&k, &e.model.sessions[&k], last + 130.0);
+    assert_eq!((row.state, row.alert, row.active), (Display::Ended, false, false));
+    assert_eq!(row.reason.as_deref(), Some("cleared"));
 
-    // The agent process dies: Ended.
-    setup.world.lock().unwrap().alive.insert(900, false);
-    e.poll(last + 200.0);
-    assert_eq!(e.model.row(&k, &e.model.sessions[&k], last + 200.0).state, Display::Ended);
 }
 
 #[test]
@@ -247,4 +246,24 @@ fn housekeeping_deletes_old_ended_pulse_files_only() {
     assert!(new_ended.exists());
     assert!(!ancient.exists());
     assert!(other.exists());
+}
+
+#[test]
+fn claude_liveness_by_agent_pid_or_status_pid() {
+    use nuff_pulse::claude::ClaudeStatus;
+    use nuff_pulse::engine::claude_liveness;
+    use nuff_pulse::model::Liveness;
+    use nuff_pulse::pulse::{parse_line, HookState};
+    let mut hooks = HookState::default();
+    hooks.apply(&parse_line(r#"{"v":1,"t":1,"runtime":"claude","session_id":"a","host":{"os":"windows","agent_pid":900,"agent_started":1.0}}"#).unwrap());
+    let status = ClaudeStatus::parse(r#"{"pid":901,"sessionId":"a","status":"busy","statusUpdatedAt":1000}"#).unwrap();
+    let probe = |alive: &[(u32, bool)]| FakeProbe(World { alive: alive.iter().copied().collect(), holds: HashMap::new() });
+    assert_eq!(claude_liveness(&probe(&[(900, true)]), &hooks, Some(&status)), Liveness::Live);
+    assert_eq!(claude_liveness(&probe(&[(901, true)]), &hooks, Some(&status)), Liveness::Live);
+    assert_eq!(claude_liveness(&probe(&[]), &hooks, Some(&status)), Liveness::NotLive);
+    assert_eq!(claude_liveness(&probe(&[]), &HookState::default(), None), Liveness::Unknown);
+    // Linux pids from WSL hook lines are never looked up among Windows processes.
+    let mut wsl = HookState::default();
+    wsl.apply(&parse_line(r#"{"v":1,"t":1,"runtime":"claude","session_id":"a","host":{"os":"wsl","agent_pid":900}}"#).unwrap());
+    assert_eq!(claude_liveness(&probe(&[(900, true)]), &wsl, None), Liveness::Unknown);
 }

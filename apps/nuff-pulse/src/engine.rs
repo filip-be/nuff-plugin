@@ -247,7 +247,6 @@ impl Engine {
 
     /// Reads a file and applies it to its session.
     fn process(&mut self, root: usize, path: &Path, fref: FileRef, now: f64) {
-        let _ = now;
         let changed = match &fref {
             FileRef::ClaudeTranscript(id) => {
                 let key = self.key(root, Runtime::Claude, id);
@@ -257,8 +256,8 @@ impl Engine {
                         s.claude = None;
                     }
                     let log = s.claude.get_or_insert_with(ClaudeLog::new);
-                    if !chunk.head.is_empty() {
-                        chunk.head.iter().for_each(|l| log.apply_line(l));
+                    chunk.head.iter().for_each(|l| log.apply_line(l));
+                    if chunk.skipped {
                         log.forget_open();
                     }
                     chunk.lines.iter().for_each(|l| log.apply_line(l));
@@ -276,8 +275,8 @@ impl Engine {
                         s.copilot = None;
                     }
                     let log = s.copilot.get_or_insert_with(CopilotLog::new);
-                    if !chunk.head.is_empty() {
-                        chunk.head.iter().for_each(|l| log.apply_line(l));
+                    chunk.head.iter().for_each(|l| log.apply_line(l));
+                    if chunk.skipped {
                         log.forget_open();
                     }
                     chunk.lines.iter().for_each(|l| log.apply_line(l));
@@ -329,6 +328,7 @@ impl Engine {
                     for (k, other) in self.model.sessions.iter_mut() {
                         if *k != key && k.origin == key.origin && other.status.as_ref().is_some_and(|o| o.pid == st.pid) {
                             other.status = None;
+                            other.cleared_t = Some(st.status_t.unwrap_or(now));
                             other.note_state();
                         }
                     }
