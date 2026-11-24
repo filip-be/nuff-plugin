@@ -110,8 +110,8 @@ pub fn running() -> Option<Vec<String>> {
     let text = decode(&out.stdout);
     if out.status.success() {
         Some(parse_running(&text))
-    } else if text.contains("no running") || out.stdout.is_empty() {
-        // Older wsl.exe exits non-zero when nothing runs.
+    } else if text.to_lowercase().contains("no running") {
+        // Older wsl.exe exits non-zero, with this message, when nothing runs.
         Some(Vec::new())
     } else {
         None

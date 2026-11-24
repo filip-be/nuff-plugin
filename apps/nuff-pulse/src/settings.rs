@@ -39,6 +39,9 @@ pub struct Settings {
     pub extra_roots: Vec<ExtraRoot>,
     /// Model-name prefix → context window in tokens; the longest prefix wins.
     pub context_windows: BTreeMap<String, u64>,
+    /// A broken settings file could not be kept aside: never overwrite it.
+    #[serde(skip)]
+    pub save_blocked: bool,
 }
 
 impl Default for Settings {
@@ -50,6 +53,7 @@ impl Default for Settings {
             bar_positions: BTreeMap::new(),
             extra_roots: Vec::new(),
             context_windows: BTreeMap::new(),
+            save_blocked: false,
         }
     }
 }
@@ -79,12 +83,18 @@ impl Settings {
     /// does not parse is copied to `settings.toml.bad` first, so saving the
     /// defaults later does not lose what the user wrote.
     pub fn load_from(path: &Path) -> Settings {
-        let Ok(text) = std::fs::read_to_string(path) else { return Settings::default() };
-        match Settings::try_parse(&text) {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Settings::default(),
+            // Exists but unreadable: use defaults and leave the file alone.
+            Err(_) => return Settings { save_blocked: true, ..Default::default() },
+        };
+        let parsed = std::str::from_utf8(&bytes).map_err(|e| e.to_string()).and_then(Settings::try_parse);
+        match parsed {
             Ok(s) => s,
             Err(_) => {
-                let _ = std::fs::copy(path, path.with_extension("toml.bad"));
-                Settings::default()
+                let kept = std::fs::copy(path, path.with_extension("toml.bad")).is_ok();
+                Settings { save_blocked: !kept, ..Default::default() }
             }
         }
     }
@@ -95,6 +105,9 @@ impl Settings {
 
     /// Writes through a temporary file so a crash never leaves half a file.
     pub fn save_to(&self, path: &Path) -> std::io::Result<()> {
+        if self.save_blocked {
+            return Err(std::io::Error::other("the settings file could not be read or backed up; not overwriting it"));
+        }
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
@@ -231,6 +244,11 @@ mod tests {
         std::fs::write(&path, "hotkey = [\n").unwrap();
         assert_eq!(Settings::load_from(&path), Settings::default());
         assert_eq!(std::fs::read_to_string(dir.join("settings.toml.bad")).unwrap(), "hotkey = [\n");
+        // Not UTF-8: also kept aside.
+        std::fs::write(&path, [0xFFu8, 0xFE, 0x00]).unwrap();
+        assert_eq!(Settings::load_from(&path), Settings::default());
+        assert_eq!(std::fs::read(dir.join("settings.toml.bad")).unwrap(), vec![0xFF, 0xFE, 0x00]);
+        assert!(Settings { save_blocked: true, ..Default::default() }.save_to(&path).is_err());
         let s = Settings { hotkey: "Ctrl+Alt+K".into(), ..Default::default() };
         s.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path), s);

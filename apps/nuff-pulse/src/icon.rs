@@ -3,6 +3,7 @@
 
 const ACCENT: [u8; 3] = [0x2F, 0x9E, 0xD8];
 const BADGE: [u8; 3] = [0xD9, 0x30, 0x25];
+const NEEDS: [u8; 3] = [0xF5, 0x9E, 0x0B];
 const WHITE: [u8; 3] = [0xFF, 0xFF, 0xFF];
 
 /// 3×5 digits, one row per byte, high bit of the low three bits = left.
@@ -83,15 +84,17 @@ impl Canvas {
 }
 
 /// The icon at `size`×`size` with a badge showing `alerts` (none when 0;
-/// `+` above 9). `badge_on` false draws the icon without the badge (blink).
-pub fn render(size: u32, alerts: usize, badge_on: bool) -> Vec<u8> {
+/// `+` above 9). `lit` false is the other blink frame: an amber ring and no
+/// badge, so the blink shows even when every alert was seen.
+pub fn render(size: u32, alerts: usize, lit: bool) -> Vec<u8> {
     let s = size.max(8) as usize;
     let f = s as f32;
     let mut c = Canvas::new(s);
     // Pulse ring with a dot in the middle.
-    c.disc(f / 2.0, f / 2.0, f * 0.46, f * 0.30, ACCENT);
-    c.disc(f / 2.0, f / 2.0, f * 0.16, 0.0, ACCENT);
-    if alerts > 0 && badge_on {
+    let ring = if lit { ACCENT } else { NEEDS };
+    c.disc(f / 2.0, f / 2.0, f * 0.46, f * 0.30, ring);
+    c.disc(f / 2.0, f / 2.0, f * 0.16, 0.0, ring);
+    if alerts > 0 && lit {
         let r = f * 0.30;
         let (cx, cy) = (f - r, f - r);
         c.disc(cx, cy, r + f * 0.04, 0.0, WHITE);
@@ -122,7 +125,9 @@ mod tests {
         let i = (27 * 32 + 27) * 4;
         assert_eq!(&badged[i..i + 4], &[BADGE[0], BADGE[1], BADGE[2], 255]);
         assert_ne!(badged, plain);
-        assert_eq!(render(32, 3, false), plain, "badge off while blinking");
+        let dark = render(32, 3, false);
+        assert_ne!(dark, plain, "the other blink frame differs even without alerts");
+        assert_eq!(dark, render(32, 0, false), "and has no badge");
         assert_ne!(render(16, 12, true), render(16, 0, true));
     }
 }

@@ -160,6 +160,7 @@ impl Engine {
             self.housekeeping(now);
             self.next_housekeeping = now + HOUSEKEEPING_EVERY;
         }
+        self.revive(now);
         self.generation != before
     }
 
@@ -202,6 +203,16 @@ impl Engine {
             }
         }
         self.rescan(now, None);
+        self.revive(now);
+        self.generation += 1;
+    }
+
+    /// Sessions marked `root_gone` whose files are read again (now, or on a
+    /// later poll once they show up) are no longer ended by that mark.
+    fn revive(&mut self, now: f64) {
+        if !self.model.sessions.values().any(|s| s.root_gone) {
+            return;
+        }
         let read = self.read_keys();
         for (key, s) in self.model.sessions.iter_mut() {
             if s.root_gone && read.contains(key) {
@@ -210,9 +221,9 @@ impl Engine {
                 s.live_t = now;
                 s.note_state();
                 self.live_soon = true;
+                self.generation += 1;
             }
         }
-        self.generation += 1;
     }
 
     /// Sessions that have at least one tracked file.
@@ -472,6 +483,10 @@ impl Engine {
                 }
             };
             if s.live != live || s.lock_pid != lock_pid {
+                if s.lock_pid != lock_pid {
+                    // Lets Focus refuse the pid once another process reuses it.
+                    s.lock_started = lock_pid.and_then(crate::procs::process_created);
+                }
                 s.live = live;
                 s.live_t = now;
                 s.lock_pid = lock_pid;

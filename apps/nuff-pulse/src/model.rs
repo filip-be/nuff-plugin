@@ -89,6 +89,8 @@ pub struct Session {
     /// Copilot: pid of the live `inuse.<pid>.hold` and its process.
     pub lock_pid: Option<u32>,
     pub lock: Option<LockProcess>,
+    /// Creation time of `lock_pid`.
+    pub lock_started: Option<f64>,
     pub acked_t: f64,
     pub history: VecDeque<(f64, State)>,
     /// Modification time of the session's log when last read.
@@ -502,6 +504,7 @@ impl Model {
                 r.resume_command = format!("copilot --resume {}", key.id);
                 if !wsl {
                     r.focus_pid = s.lock_pid;
+                    r.focus_started = s.lock_started;
                 }
             }
         }

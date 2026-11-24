@@ -127,6 +127,8 @@ struct App {
     layout: String,
     /// Bar top-left last placed or seen (physical pixels).
     placed: Option<[i32; 2]>,
+    /// The hotkey before a change that is still being registered.
+    hotkey_before: Option<String>,
     save_position_at: Option<f64>,
     placed_once: bool,
     last_size: egui::Vec2,
@@ -177,6 +179,7 @@ impl App {
             quitting: false,
             layout: String::new(),
             placed: None,
+            hotkey_before: None,
             save_position_at: None,
             placed_once: false,
             last_size: egui::Vec2::ZERO,
@@ -305,6 +308,10 @@ impl App {
             s.bar_mode = self.settings.bar_mode;
             s.bar_visible = self.settings.bar_visible;
             let hotkey_changed = s.hotkey != self.settings.hotkey;
+            if hotkey_changed {
+                self.hotkey_before = Some(self.settings.hotkey.clone());
+            }
+            s.save_blocked = self.settings.save_blocked;
             self.settings = s;
             let saved = self.settings.save();
             self.shared.send(Cmd::Settings(self.settings.clone()));
@@ -341,6 +348,19 @@ impl eframe::App for App {
             if w.hotkey_ok != ok {
                 w.hotkey_ok = ok;
                 ctx.request_repaint_of(app_viewport());
+            }
+            // A new hotkey taken by another app: keep the old one, also in
+            // the file, so a restart does not end up with none.
+            match (ok, self.hotkey_before.take()) {
+                (Some(false), Some(before)) => {
+                    w.status = format!("{} is in use by another app; kept {before}.", self.settings.hotkey);
+                    w.edit.hotkey = before.clone();
+                    self.settings.hotkey = before;
+                    let _ = self.settings.save();
+                    shell.set_hotkey(settings::parse_hotkey(&self.settings.hotkey));
+                }
+                (None, Some(before)) => self.hotkey_before = Some(before), // still pending
+                _ => {}
             }
         }
     }
