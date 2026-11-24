@@ -99,7 +99,6 @@ fn pill(ui: &mut Ui, active: &[&Row], now: f64, t: f64, bg: &egui::Response, tog
     if bg.clicked() {
         *toggle = true;
     }
-    bg.clone().on_hover_text("Click: show the sessions · drag: move");
     let w = resp.rect.width() + 2.0 * PAD + 2.0 + 6.0;
     Vec2::new(w.max(96.0), PILL_H)
 }
@@ -188,7 +187,8 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
     if resp.clicked() {
         open_row(shared, r);
     }
-    resp.on_hover_text(hover(r, now));
+    // Keep it short: tooltips are drawn inside the bar's own small window.
+    resp.on_hover_text(hover(r));
 
     // Columns: ring | title + what it does | figures + where (right-aligned).
     let inner = rect.shrink2(Vec2::new(8.0, 6.0));
@@ -244,21 +244,14 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
     });
 }
 
-fn hover(r: &Row, now: f64) -> String {
+fn hover(r: &Row) -> String {
     let mut s = format!("{}\n{}", r.title, fmt::place(r));
     if let Some(m) = &r.model {
         s.push_str(&format!("\n{m}"));
     }
-    let ctx = fmt::context(r);
-    if !ctx.is_empty() {
-        s.push_str(&format!("\nContext: {ctx} tokens"));
-    }
-    if let Some(e) = r.cache_expires {
-        s.push_str(&format!("\nPrompt cache: {} left", fmt::left(e - now)));
-    }
     if let Some(p) = &r.last_prompt {
         s.push_str(&format!("\n“{}”", nuff_pulse::util::short(p, 80)));
     }
-    s.push_str("\nClick: clear alert and focus window · drag: move the bar");
+    s.push_str("\nClick: clear alert and focus window");
     s
 }
