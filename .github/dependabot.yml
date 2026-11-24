@@ -1,0 +1,19 @@
+# Dependabot updates GitHub Actions and the nuff-pulse widget's Cargo crates.
+# The cooldown holds a new release back for a week, so a malicious publish has
+# time to be found and pulled before it reaches this repository. Security
+# updates are not held back. The plugins' Python code uses only the standard
+# library, and CI installs the latest Rust and Python, so neither is managed here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  - package-ecosystem: cargo
+    directory: /apps/nuff-pulse
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
