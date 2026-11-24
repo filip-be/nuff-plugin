@@ -80,6 +80,8 @@ struct Inner {
     tray: TrayState,
     hotkey: Option<(u32, u32)>,
     hotkey_ok: Option<bool>,
+    /// The hotkey registered now.
+    registered: Option<(u32, u32)>,
 }
 
 /// Handle to the shell thread.
@@ -108,7 +110,7 @@ thread_local! {
 impl Shell {
     /// Starts the shell thread. `on_event` runs on that thread.
     pub fn spawn(on_event: impl Fn(ShellEvent) + Send + 'static, hotkey: Option<(u32, u32)>, tray: TrayState) -> Option<Shell> {
-        let inner = Arc::new(Mutex::new(Inner { tray, hotkey, hotkey_ok: None }));
+        let inner = Arc::new(Mutex::new(Inner { tray, hotkey, hotkey_ok: None, registered: None }));
         let (tx, rx) = channel();
         let thread_inner = inner.clone();
         std::thread::Builder::new()
@@ -169,7 +171,8 @@ impl Shell {
     }
 
     /// `Some(false)` when the hotkey could not be registered (taken by
-    /// another app); `None` while pending or when there is none.
+    /// another app; the previous one then stays active); `None` while
+    /// pending or when there is none.
     pub fn hotkey_ok(&self) -> Option<bool> {
         self.inner.lock().unwrap().hotkey_ok
     }
@@ -307,10 +310,21 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
 
 unsafe fn register_hotkey(hwnd: HWND) {
     let Some(inner) = CTX.with(|c| c.borrow().as_ref().map(|x| x.inner.clone())) else { return };
+    let (wanted, previous) = {
+        let i = inner.lock().unwrap();
+        (i.hotkey, i.registered)
+    };
     UnregisterHotKey(hwnd, HOTKEY_ID);
-    let hotkey = inner.lock().unwrap().hotkey;
-    let ok = hotkey.map(|(mods, vk)| RegisterHotKey(hwnd, HOTKEY_ID, mods | MOD_NOREPEAT, vk) != 0);
-    inner.lock().unwrap().hotkey_ok = ok;
+    let register = |(mods, vk): (u32, u32)| RegisterHotKey(hwnd, HOTKEY_ID, mods | MOD_NOREPEAT, vk) != 0;
+    let ok = wanted.map(register);
+    let registered = match ok {
+        Some(true) => wanted,
+        // Taken by another app: keep the one that worked.
+        _ => previous.filter(|p| wanted.is_some() && register(*p)),
+    };
+    let mut i = inner.lock().unwrap();
+    i.hotkey_ok = ok;
+    i.registered = registered;
 }
 
 fn copy_tip(dst: &mut [u16; 128], s: &str) {

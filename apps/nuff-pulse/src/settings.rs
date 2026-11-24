@@ -59,6 +59,10 @@ impl Settings {
         toml::from_str(text).unwrap_or_default()
     }
 
+    pub fn try_parse(text: &str) -> Result<Settings, String> {
+        toml::from_str(text).map_err(|e| e.to_string())
+    }
+
     pub fn to_toml(&self) -> String {
         toml::to_string_pretty(self).unwrap_or_default()
     }
@@ -71,8 +75,18 @@ impl Settings {
         Some(base.join("nuff-pulse").join("settings.toml"))
     }
 
+    /// The settings in `path`; defaults when it is missing. A file that
+    /// does not parse is copied to `settings.toml.bad` first, so saving the
+    /// defaults later does not lose what the user wrote.
     pub fn load_from(path: &Path) -> Settings {
-        std::fs::read_to_string(path).map(|t| Settings::parse(&t)).unwrap_or_default()
+        let Ok(text) = std::fs::read_to_string(path) else { return Settings::default() };
+        match Settings::try_parse(&text) {
+            Ok(s) => s,
+            Err(_) => {
+                let _ = std::fs::copy(path, path.with_extension("toml.bad"));
+                Settings::default()
+            }
+        }
     }
 
     pub fn load() -> Settings {
@@ -206,6 +220,21 @@ mod tests {
         let p = Settings::parse("bar_mode = \"pill\"\n");
         assert_eq!((p.bar_mode, p.hotkey.as_str(), p.bar_visible), (BarMode::Pill, DEFAULT_HOTKEY, true));
         assert_eq!(Settings::parse("hotkey = [").hotkey, DEFAULT_HOTKEY);
+    }
+
+    #[test]
+    fn broken_file_is_kept_aside() {
+        let dir = std::env::temp_dir().join(format!("nuff-pulse-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.toml");
+        std::fs::write(&path, "hotkey = [\n").unwrap();
+        assert_eq!(Settings::load_from(&path), Settings::default());
+        assert_eq!(std::fs::read_to_string(dir.join("settings.toml.bad")).unwrap(), "hotkey = [\n");
+        let s = Settings { hotkey: "Ctrl+Alt+K".into(), ..Default::default() };
+        s.save_to(&path).unwrap();
+        assert_eq!(Settings::load_from(&path), s);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

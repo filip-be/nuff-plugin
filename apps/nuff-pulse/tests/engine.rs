@@ -289,7 +289,7 @@ fn roots_change_keeps_offsets_and_ends_stopped_wsl_sessions() {
     // The distro starts: its root is added and read.
     let mut with_wsl = setup.roots();
     with_wsl.push(wsl_root);
-    e.set_roots(with_wsl, t);
+    e.set_roots(with_wsl.clone(), t);
     assert!(e.model.sessions.contains_key(&wsl));
     let before = e.model.sessions[&windows].copilot.as_ref().unwrap().last_write_t;
 
@@ -302,4 +302,12 @@ fn roots_change_keeps_offsets_and_ends_stopped_wsl_sessions() {
     assert_eq!(e.model.sessions[&wsl].live_t, t + 1.0);
     assert_ne!(e.model.sessions[&windows].live_t, t + 1.0);
     assert!(!e.poll(t + 1.5), "nothing new to read");
+
+    // The distro runs again: its session is read again and no longer ended
+    // by the earlier stop (the fixture's own shutdown still ends it, so
+    // check the flags).
+    e.set_roots(with_wsl, t + 2.0);
+    let s = &e.model.sessions[&wsl];
+    assert!(!s.root_gone);
+    assert_eq!(s.live, nuff_pulse::model::Liveness::Unknown);
 }

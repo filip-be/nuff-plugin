@@ -45,10 +45,14 @@ pub fn target(
     created: &dyn Fn(u32) -> Option<f64>,
     windows: &[Win],
     start_pid: u32,
+    start_created: Option<f64>,
     folder: &str,
 ) -> Option<isize> {
     let mut pid = start_pid;
     let mut child_created = created(pid)?;
+    if start_created.is_some_and(|s| (s - child_created).abs() > 1.0) {
+        return None; // the agent ended and its pid now belongs to another process
+    }
     for _ in 0..32 {
         let p = procs.get(&pid)?;
         let exe = p.exe.to_ascii_lowercase();
@@ -140,13 +144,13 @@ pub fn activate(_hwnd: isize) -> bool {
 }
 
 /// Focuses the window of a session: by process chain when `pid` is known
-/// (Windows sessions), else by title (WSL). Returns false when nothing was
-/// focused.
-pub fn focus(pid: Option<u32>, folder: &str) -> bool {
+/// (Windows sessions; `started` is its creation time when known), else by
+/// title (WSL). Returns false when nothing was focused.
+pub fn focus(pid: Option<u32>, started: Option<f64>, folder: &str) -> bool {
     let procs = crate::procs::snapshot();
     let wins = windows();
     let hwnd = match pid {
-        Some(pid) => target(&procs, &crate::procs::process_created, &wins, pid, folder),
+        Some(pid) => target(&procs, &crate::procs::process_created, &wins, pid, started, folder),
         None => target_by_title(&procs, &wins, folder),
     };
     hwnd.is_some_and(activate)
@@ -173,31 +177,34 @@ mod tests {
     fn terminal_skips_the_shell() {
         let p = procs(&[(10, 1, "WindowsTerminal.exe"), (20, 10, "pwsh.exe"), (30, 20, "claude.exe")]);
         let w = [win(1, 20, "PowerShell"), win(2, 10, "Windows PowerShell")];
-        assert_eq!(target(&p, &by_pid, &w, 30, "shop"), Some(2));
+        assert_eq!(target(&p, &by_pid, &w, 30, None, "shop"), Some(2));
+        assert_eq!(target(&p, &by_pid, &w, 30, Some(30.5), "shop"), Some(2));
+        // The agent's pid was reused by a process started later.
+        assert_eq!(target(&p, &by_pid, &w, 30, Some(12.0), "shop"), None);
     }
 
     #[test]
     fn vscode_needs_the_workspace_title() {
         let p = procs(&[(10, 1, "Code.exe"), (20, 10, "Code.exe"), (30, 20, "claude.exe")]);
         let w = [win(1, 10, "other - Visual Studio Code"), win(2, 10, "main.rs - shop - Visual Studio Code")];
-        assert_eq!(target(&p, &by_pid, &w, 30, "Shop"), Some(2));
-        assert_eq!(target(&p, &by_pid, &w, 30, "nope"), None);
+        assert_eq!(target(&p, &by_pid, &w, 30, None, "Shop"), Some(2));
+        assert_eq!(target(&p, &by_pid, &w, 30, None, "nope"), None);
     }
 
     #[test]
     fn copilot_app_and_unknown_hosts() {
         let p = procs(&[(10, 1, "GitHub.exe"), (20, 10, "copilot-runtime.exe")]);
-        assert_eq!(target(&p, &by_pid, &[win(5, 10, "GitHub")], 20, ""), Some(5));
+        assert_eq!(target(&p, &by_pid, &[win(5, 10, "GitHub")], 20, None, ""), Some(5));
         // An unknown visible window stops the walk: focus nothing.
         let p = procs(&[(10, 1, "WindowsTerminal.exe"), (15, 10, "notepad.exe"), (20, 15, "copilot.exe")]);
         let w = [win(1, 15, "Notepad"), win(2, 10, "Terminal")];
-        assert_eq!(target(&p, &by_pid, &w, 20, ""), None);
+        assert_eq!(target(&p, &by_pid, &w, 20, None, ""), None);
     }
 
     #[test]
     fn reused_parent_pid_stops_the_walk() {
         let p = procs(&[(40, 1, "WindowsTerminal.exe"), (30, 40, "claude.exe")]);
-        assert_eq!(target(&p, &by_pid, &[win(1, 40, "t")], 30, ""), None);
+        assert_eq!(target(&p, &by_pid, &[win(1, 40, "t")], 30, None, ""), None);
     }
 
     #[test]

@@ -79,10 +79,9 @@ pub struct Summary {
     pub error: usize,
     /// Rows with an alert (Needs you, Done, Error not yet seen).
     pub alerts: usize,
-    /// An unseen Needs you: the tray blinks.
+    /// A session needs you (seen or not): the tray blinks until answered.
     pub blink: bool,
-    /// Smallest cache time left among active sessions that are not working
-    /// (a working session refreshes its cache), seconds.
+    /// Smallest cache time left among active sessions, seconds.
     pub urgent_cache: Option<f64>,
 }
 
@@ -92,19 +91,19 @@ pub fn summary(rows: &[Row], now: f64) -> Summary {
         s.active += 1;
         match r.state {
             Display::Working => s.working += 1,
-            Display::NeedsYou => s.needs_you += 1,
+            Display::NeedsYou => {
+                s.needs_you += 1;
+                s.blink = true;
+            }
             Display::Done => s.done += 1,
             Display::Error => s.error += 1,
             Display::Idle | Display::Ended => {}
         }
         if r.alert {
             s.alerts += 1;
-            s.blink |= r.state == Display::NeedsYou;
         }
-        if r.state != Display::Working {
-            if let Some(left) = r.cache_expires.map(|e| e - now).filter(|l| *l > 0.0) {
-                s.urgent_cache = Some(s.urgent_cache.map_or(left, |u: f64| u.min(left)));
-            }
+        if let Some(left) = r.cache_expires.map(|e| e - now).filter(|l| *l > 0.0) {
+            s.urgent_cache = Some(s.urgent_cache.map_or(left, |u: f64| u.min(left)));
         }
     }
     s
@@ -135,12 +134,16 @@ pub fn tooltip(s: &Summary) -> String {
     crate::util::short(&format!("nuff-pulse: {body}"), 127)
 }
 
-/// Resume command with the folder to run it in: `cd '<cwd>'; <command>`.
-/// Single quotes work in PowerShell and in POSIX shells.
+/// Resume command run in the session's folder, for the shell it runs in:
+/// PowerShell for Windows sessions, a POSIX shell for WSL ones. The command
+/// does not run when the folder cannot be entered.
 pub fn resume(r: &Row) -> String {
-    match r.cwd.as_deref().filter(|c| !c.is_empty()) {
-        Some(cwd) => format!("cd '{}'; {}", cwd.replace('\'', "''"), r.resume_command),
-        None => r.resume_command.clone(),
+    let Some(cwd) = r.cwd.as_deref().filter(|c| !c.is_empty()) else { return r.resume_command.clone() };
+    match r.key.origin {
+        crate::model::Origin::Windows => {
+            format!("Set-Location -LiteralPath '{}' -ErrorAction Stop; {}", cwd.replace('\'', "''"), r.resume_command)
+        }
+        crate::model::Origin::Wsl(_) => format!("cd '{}' && {}", cwd.replace('\'', "'\\''"), r.resume_command),
     }
 }
 
@@ -201,11 +204,12 @@ mod tests {
         ];
         let s = summary(&rows, 0.0);
         assert_eq!((s.active, s.alerts, s.blink, s.working, s.done), (4, 2, true, 1, 1));
-        assert_eq!(s.urgent_cache, Some(400.0));
+        assert_eq!(s.urgent_cache, Some(100.0), "working sessions count too");
         assert_eq!(tooltip(&s), "nuff-pulse: 1 need you, 1 done, 1 working");
         assert_eq!(tooltip(&Summary::default()), "nuff-pulse: no active sessions");
-        let acked = summary(&[row(Display::NeedsYou, false, None)], 0.0);
-        assert!(!acked.blink);
+        // Seen but not answered: still blinks.
+        assert!(summary(&[row(Display::NeedsYou, false, None)], 0.0).blink);
+        assert!(!summary(&[row(Display::Done, true, None)], 0.0).blink);
     }
 
     #[test]
@@ -214,10 +218,12 @@ mod tests {
         r.resume_command = "claude --resume abc".into();
         assert_eq!(resume(&r), "claude --resume abc");
         r.cwd = Some("D:\\it's".into());
-        assert_eq!(resume(&r), "cd 'D:\\it''s'; claude --resume abc");
+        assert_eq!(resume(&r), "Set-Location -LiteralPath 'D:\\it''s' -ErrorAction Stop; claude --resume abc");
         r.label = "Copilot CLI".into();
         r.workspace = "shop".into();
         r.key.origin = Origin::Wsl("Ubuntu".into());
         assert_eq!(place(&r), "Copilot CLI · WSL Ubuntu · shop");
+        r.cwd = Some("/home/o'brien".into());
+        assert_eq!(resume(&r), "cd '/home/o'\\''brien' && claude --resume abc");
     }
 }

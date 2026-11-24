@@ -92,10 +92,11 @@ pub fn any_installed() -> bool {
     false
 }
 
-/// Running distros, from `wsl.exe --list --running --quiet` (no window).
-pub fn running() -> Vec<String> {
+/// Running distros, from `wsl.exe --list --running --quiet` (no window);
+/// `None` when `wsl.exe` failed, so callers keep what they had.
+pub fn running() -> Option<Vec<String>> {
     if !any_installed() {
-        return Vec::new();
+        return Some(Vec::new());
     }
     let mut cmd = std::process::Command::new("wsl.exe");
     cmd.args(["--list", "--running", "--quiet"]).stdin(std::process::Stdio::null());
@@ -105,15 +106,21 @@ pub fn running() -> Vec<String> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    match cmd.output() {
-        Ok(out) if out.status.success() => parse_running(&decode(&out.stdout)),
-        _ => Vec::new(),
+    let out = cmd.output().ok()?;
+    let text = decode(&out.stdout);
+    if out.status.success() {
+        Some(parse_running(&text))
+    } else if text.contains("no running") || out.stdout.is_empty() {
+        // Older wsl.exe exits non-zero when nothing runs.
+        Some(Vec::new())
+    } else {
+        None
     }
 }
 
-/// Roots of every running distro.
-pub fn discover() -> Vec<Root> {
-    running().iter().flat_map(|d| roots_in(&distro_root(d), d)).collect()
+/// Roots of every running distro; `None` when that is unknown right now.
+pub fn discover() -> Option<Vec<Root>> {
+    Some(running()?.iter().flat_map(|d| roots_in(&distro_root(d), d)).collect())
 }
 
 #[cfg(test)]

@@ -164,13 +164,20 @@ impl Engine {
     }
 
     /// Replaces the roots (settings changed, a WSL distro started or
-    /// stopped). Files of roots that stay keep their read offsets; sessions
-    /// of a WSL distro that no longer runs end.
+    /// stopped). Files of roots that stay keep their read offsets. Sessions
+    /// no longer read from any root end; they come back when their files are
+    /// read again (the distro runs again, the root is added back).
     pub fn set_roots(&mut self, roots: Vec<Root>, now: f64) {
         if roots == self.roots {
             return;
         }
         let map: Vec<Option<usize>> = self.roots.iter().map(|r| roots.iter().position(|n| n == r)).collect();
+        let dropped: HashSet<SessionKey> = self
+            .files
+            .values()
+            .filter(|t| map[t.root].is_none())
+            .filter_map(|t| file_key(&t.fref, &self.roots[t.root].origin))
+            .collect();
         self.files.retain(|_, t| map[t.root].is_some());
         for t in self.files.values_mut() {
             t.root = map[t.root].unwrap_or(t.root);
@@ -185,16 +192,32 @@ impl Engine {
         }
         self.watched.retain(|d| keep.contains(d));
         self.roots = roots;
-        let origins: HashSet<Origin> = self.roots.iter().map(|r| r.origin.clone()).collect();
-        for (key, s) in self.model.sessions.iter_mut() {
-            if matches!(key.origin, Origin::Wsl(_)) && !origins.contains(&key.origin) && s.live != Liveness::NotLive {
+        let read = self.read_keys();
+        for key in dropped.iter().filter(|k| !read.contains(*k)) {
+            if let Some(s) = self.model.sessions.get_mut(key) {
+                s.root_gone = true;
                 s.live = Liveness::NotLive;
                 s.live_t = now;
                 s.note_state();
             }
         }
         self.rescan(now, None);
+        let read = self.read_keys();
+        for (key, s) in self.model.sessions.iter_mut() {
+            if s.root_gone && read.contains(key) {
+                s.root_gone = false;
+                s.live = Liveness::Unknown;
+                s.live_t = now;
+                s.note_state();
+                self.live_soon = true;
+            }
+        }
         self.generation += 1;
+    }
+
+    /// Sessions that have at least one tracked file.
+    fn read_keys(&self) -> HashSet<SessionKey> {
+        self.files.values().filter_map(|t| file_key(&t.fref, &self.roots[t.root].origin)).collect()
     }
 
     /// Replaces the context window overrides.
@@ -269,7 +292,8 @@ impl Engine {
         let due: Vec<(PathBuf, usize, FileRef)> = self
             .files
             .iter()
-            .filter(|(_, t)| t.tailer.is_some())
+            // Polled roots (WSL) are read on their own 5 s round.
+            .filter(|(_, t)| t.tailer.is_some() && !self.roots[t.root].poll)
             .filter(|(p, t)| {
                 let len = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
                 len != t.tailer.as_ref().map_or(0, Tailer::offset)
@@ -434,7 +458,7 @@ impl Engine {
             self.roots.iter().filter(|r| r.kind == RootKind::Copilot && r.origin == Origin::Windows).cloned().collect();
         let mut changed = false;
         for (key, s) in self.model.sessions.iter_mut() {
-            if key.origin != Origin::Windows || now - s.last_activity() > ACTIVE_WINDOW {
+            if key.origin != Origin::Windows || s.root_gone || now - s.last_activity() > ACTIVE_WINDOW {
                 continue;
             }
             let (live, lock_pid, lock) = match key.runtime {
@@ -500,6 +524,17 @@ impl Engine {
             self.generation += 1;
         }
     }
+}
+
+/// The session a file belongs to (status files name theirs inside).
+fn file_key(fref: &FileRef, origin: &Origin) -> Option<SessionKey> {
+    let (runtime, id) = match fref {
+        FileRef::ClaudeTranscript(id) => (Runtime::Claude, id),
+        FileRef::CopilotEvents(id) | FileRef::CopilotWorkspace(id) | FileRef::CopilotLock(id) => (Runtime::Copilot, id),
+        FileRef::Pulse(rt, id) => (*rt, id),
+        FileRef::ClaudeStatus(_) => return None,
+    };
+    Some(SessionKey { runtime, origin: origin.clone(), id: id.clone() })
 }
 
 /// Records that carry a log's current state; the first read of a large log

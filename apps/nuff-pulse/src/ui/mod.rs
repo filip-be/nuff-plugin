@@ -81,12 +81,16 @@ impl Shared {
 /// Clears a row's alert and brings its window to the front.
 pub fn open_row(shared: &Shared, r: &Row) {
     shared.send(Cmd::Ack(r.key.clone()));
-    let folder = r.workspace.clone();
-    let pid = r.focus_pid;
-    let wsl = matches!(r.key.origin, nuff_pulse::model::Origin::Wsl(_));
-    if pid.is_some() || wsl {
-        nuff_pulse::focus::focus(pid, &folder);
+    if can_focus(r) {
+        nuff_pulse::focus::focus(r.focus_pid, r.focus_started, &r.workspace);
     }
+}
+
+/// Windows sessions with an agent pid, or WSL sessions (by title); never an
+/// ended session, whose window is gone or belongs to something else now.
+pub fn can_focus(r: &Row) -> bool {
+    r.state != nuff_pulse::model::Display::Ended
+        && (r.focus_pid.is_some() || matches!(r.key.origin, nuff_pulse::model::Origin::Wsl(_)))
 }
 
 /// Runs the widget; `open_app` also opens the app window. When a widget
@@ -412,7 +416,8 @@ impl eframe::App for App {
 fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: Settings) {
     let base = roots::default_roots();
     let mut extra = settings.roots();
-    let mut wsl_roots: Vec<Root> = Vec::new();
+    // WSL first, so the startup rule below covers WSL sessions too.
+    let mut wsl_roots: Vec<Root> = wsl::discover().unwrap_or_default();
     let all = |extra: &[Root], wsl_roots: &[Root]| -> Vec<Root> {
         let mut v = base.clone();
         for r in extra.iter().chain(wsl_roots) {
@@ -432,7 +437,7 @@ fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: 
             engine.acknowledge(&r.key, now);
         }
     }
-    let mut next_wsl = 0.0;
+    let mut next_wsl = util::now() + wsl::REFRESH_EVERY;
     let mut last_shown = Vec::new();
     let mut last_publish = f64::MIN;
     let mut generation = u64::MAX;
@@ -450,8 +455,7 @@ fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: 
         let now = util::now();
         if now >= next_wsl {
             next_wsl = now + wsl::REFRESH_EVERY;
-            let found = wsl::discover();
-            if found != wsl_roots {
+            if let Some(found) = wsl::discover().filter(|f| *f != wsl_roots) {
                 wsl_roots = found;
                 engine.set_roots(all(&extra, &wsl_roots), now);
             }

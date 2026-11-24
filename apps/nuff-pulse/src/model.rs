@@ -95,6 +95,9 @@ pub struct Session {
     pub log_mtime: Option<f64>,
     /// When the session's process started another session (Claude `/clear`).
     pub cleared_t: Option<f64>,
+    /// None of the session's files is read any more (its root was removed
+    /// or its WSL distro stopped).
+    pub root_gone: bool,
 }
 
 impl Session {
@@ -303,6 +306,8 @@ pub struct Row {
     pub context_level: Level,
     pub cache_expires: Option<f64>,
     pub cache_level: Option<Level>,
+    /// Cache lifetime of the current model, seconds.
+    pub cache_ttl: Option<f64>,
     pub cache_expiring: bool,
     pub model: Option<String>,
     pub effort: Option<String>,
@@ -316,6 +321,9 @@ pub struct Row {
     pub resume_command: String,
     /// Process to start the focus walk from (Windows sessions only).
     pub focus_pid: Option<u32>,
+    /// Creation time of `focus_pid` when known, so a reused pid is not
+    /// followed.
+    pub focus_started: Option<f64>,
 }
 
 #[derive(Debug, Default)]
@@ -385,8 +393,10 @@ impl Model {
         };
         let last_activity = s.last_activity();
         let active = raw != State::Ended && now - last_activity < ACTIVE_WINDOW;
-        // Sessions that left the bar raise no alert.
+        // Sessions that left the bar raise no alert, and after 2 h without
+        // activity a session counts as ended whatever it said last.
         let alert = alert && active;
+        let state = if active { state } else { Display::Ended };
         let wsl = matches!(key.origin, Origin::Wsl(_));
 
         let mut r = Row {
@@ -409,6 +419,7 @@ impl Model {
             context_level: Level::Ok,
             cache_expires: None,
             cache_level: None,
+            cache_ttl: None,
             cache_expiring: false,
             model: None,
             effort: None,
@@ -420,6 +431,7 @@ impl Model {
             history: s.history.iter().copied().collect(),
             resume_command: String::new(),
             focus_pid: None,
+            focus_started: None,
         };
 
         match key.runtime {
@@ -448,16 +460,17 @@ impl Model {
                     r.last_prompt = l.last_prompt.clone();
                     r.permission_mode = l.permission_mode.clone();
                     r.cache_expires = l.cache_expires();
+                    r.cache_ttl = l.last_request_t.map(|_| l.cache_ttl);
                 }
                 r.context_window = self.config.context_window(r.model.as_deref(), None);
                 r.resume_command = format!("claude --resume {}", key.id);
                 if !wsl {
-                    r.focus_pid = s
-                        .hooks
-                        .host
-                        .as_ref()
-                        .and_then(|h| h.agent_pid)
-                        .or(s.status.as_ref().map(|x| x.pid));
+                    let host = s.hooks.host.as_ref().filter(|h| h.agent_pid.is_some());
+                    (r.focus_pid, r.focus_started) = match (host, s.status.as_ref()) {
+                        (Some(h), _) => (h.agent_pid, h.agent_started),
+                        (None, Some(st)) => (Some(st.pid), st.proc_start),
+                        (None, None) => (None, None),
+                    };
                 }
             }
             Runtime::Copilot => {
@@ -482,6 +495,7 @@ impl Model {
                     r.last_prompt = l.last_prompt.clone();
                     r.permission_mode = l.permission_mode.clone();
                     r.cache_expires = l.cache_expires();
+                    r.cache_ttl = l.cache_ttl();
                 }
                 r.context_window =
                     self.config.context_window(r.model.as_deref(), log.and_then(|l| l.max_prompt_tokens));

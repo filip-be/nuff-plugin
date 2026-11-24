@@ -173,8 +173,7 @@ fn detail(ui: &mut Ui, shared: &Shared, r: &Row, now: f64) {
         }
     });
     ui.horizontal(|ui| {
-        let focusable = r.focus_pid.is_some() || matches!(r.key.origin, nuff_pulse::model::Origin::Wsl(_));
-        if ui.add_enabled(focusable, egui::Button::new("Focus window")).clicked() {
+        if ui.add_enabled(super::can_focus(r), egui::Button::new("Focus window")).clicked() {
             open_row(shared, r);
         }
         if ui.button("Copy resume command").on_hover_text(fmt::resume(r)).clicked() {
@@ -222,11 +221,14 @@ fn detail(ui: &mut Ui, shared: &Shared, r: &Row, now: f64) {
         }
         if let Some(e) = r.cache_expires {
             let left = e - now;
-            let text = if left > 0.0 {
+            let mut text = if left > 0.0 {
                 format!("{} left, expires {}", fmt::left(left), fmt::clock(e, today))
             } else {
                 format!("cold since {}", fmt::clock(e, today))
             };
+            if let Some(ttl) = r.cache_ttl {
+                text.push_str(&format!(" · TTL {}", fmt::left(ttl)));
+            }
             ui.label(RichText::new("Cache").weak());
             ui.label(RichText::new(text).color(look::cache_color(ui, nuff_pulse::model::cache_level(left))));
             ui.end_row();
@@ -341,6 +343,9 @@ fn settings_tab(ui: &mut Ui, shared: &Shared, w: &mut WinState) {
             ui.horizontal(|ui| {
                 if ui.button("Save").clicked() {
                     match parse_windows(&w.windows) {
+                        _ if settings::parse_hotkey(&w.edit.hotkey).is_none() => {
+                            w.status = "Not saved: the hotkey is not valid.".into();
+                        }
                         Ok(map) => {
                             w.edit.context_windows = map;
                             w.apply = Some(w.edit.clone());

@@ -103,6 +103,12 @@ impl CopilotLog {
         !self.open_permissions.is_empty() || !self.open_asks.is_empty()
     }
 
+    /// Cache lifetime of the current model, seconds.
+    pub fn cache_ttl(&self) -> Option<f64> {
+        let model = self.model.as_deref()?;
+        Some(self.cache_state.get(model).and_then(|e| e.ttl).unwrap_or_else(|| default_ttl(model)))
+    }
+
     /// Cache expiry of the current model, Unix seconds.
     pub fn cache_expires(&self) -> Option<f64> {
         let model = self.model.as_deref();
