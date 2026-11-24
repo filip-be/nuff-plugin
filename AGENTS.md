@@ -55,6 +55,15 @@ Allowed:
 
 - Mentions of `CONTEXT.md`, ADRs or `AGENTS.md` that mean the *user's* project files.
 - Maintainer notes in source files about how they are kept in sync with repo source, such as the shared-core note in `nuff_hooks_core.py`.
+- Naming an app from `apps/` as a reader of the files the plugin writes, with a link to the app's release (see [Apps](#apps)).
+
+## Apps
+
+Apps are standalone programs in `apps/<name>/` (for example the `nuff-pulse` Windows widget). They are not plugins: they are not listed in `.claude-plugin/marketplace.json`, not shipped with any plugin, and are released by CI (a GitHub release per tag `apps/<name>/v*`). An app keeps its own README and CHANGELOG; changing an app needs no plugin or marketplace version bump.
+
+A plugin may write files that an app reads. The plugin then owns that file format: its README documents the format in full, may name the app as a reader and link the app's release, and must not depend on anything else in `apps/`. When the format changes, change the plugin README and the app's reader together.
+
+`nuff-pulse-cc` and `nuff-pulse-copilot` ship identical copies of `plugins/nuff-pulse/core/nuff_pulse_core.py` (`plugins/nuff-pulse/` is shared source, not a plugin). Change the core only there, copy it into both plugins' `hooks/` folders and run `py -3 -m unittest discover -s plugins/nuff-pulse/tests` (`python3` on Linux and macOS).
 
 ## Checklist for common operations
 

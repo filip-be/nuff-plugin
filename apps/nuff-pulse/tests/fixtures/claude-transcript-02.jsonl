@@ -1,0 +1,9 @@
+{"type": "mode", "mode": "<str:6>", "sessionId": "id-0001"}
+{"type": "session-owner", "accountUuid": "<str:36>", "organizationUuid": "<str:36>", "sessionId": "id-0001"}
+{"type": "queue-operation", "operation": "enqueue", "timestamp": "2025-11-24T16:00:00Z", "sessionId": "id-0001", "content": "<str:158>"}
+{"parentUuid": null, "isSidechain": false, "type": "user", "message": {"role": "user", "content": "<str:217>"}, "isMeta": true, "uuid": "id-0002", "timestamp": "2025-11-24T16:00:00.004000Z", "userType": "external", "entrypoint": "claude-vscode", "cwd": "C:\\work\\project", "sessionId": "id-0001", "version": "2.1.327", "gitBranch": "feature"}
+{"parentUuid": "id-0002", "isSidechain": false, "type": "user", "message": {"role": "user", "content": "<str:130>"}, "uuid": "id-0003", "timestamp": "2025-11-24T15:59:59.940000Z", "turnAttributionKey": "<str:36>", "userType": "external", "entrypoint": "claude-vscode", "cwd": "C:\\work\\project", "sessionId": "id-0001", "version": "2.1.327", "gitBranch": "feature"}
+{"parentUuid": "id-0003", "isSidechain": false, "type": "system", "subtype": "local_command", "content": "<str:45>", "level": "info", "timestamp": "2025-11-24T16:00:00.002000Z", "uuid": "id-0004", "isMeta": false, "commandRun": {"command": "<str:5>", "args": "<str:0>"}, "userType": "external", "entrypoint": "claude-vscode", "cwd": "C:\\work\\project", "sessionId": "id-0001", "version": "2.1.327", "gitBranch": "feature"}
+{"type": "queue-operation", "operation": "dequeue", "timestamp": "2025-11-27T16:40:20.822000Z", "sessionId": "id-0001"}
+{"type": "last-prompt", "leafUuid": "id-0004", "sessionId": "id-0001"}
+{"type": "cost-state", "sessionId": "id-0001", "totalCostUSD": 0, "totalAPIDuration": 0, "totalAPIDurationWithoutRetries": 0, "totalToolDuration": 0, "totalLinesAdded": 0, "totalLinesRemoved": 0, "totalDuration": 261620874, "startTime": 1795171541864, "modelUsage": {}, "hasUnknownModelCost": false}

@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "hooks": {
+        "agentStop": [
+            {
+                "type": "command",
+                "bash": "if command -v py >/dev/null 2>&1; then py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" agentStop; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" agentStop; fi >/dev/null 2>&1; exit 0",
+                "powershell": "try { if (Get-Command py -ErrorAction SilentlyContinue) { py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" agentStop *> $null } elseif (Get-Command python3 -ErrorAction SilentlyContinue) { python3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" agentStop *> $null } } catch {}; exit 0",
+                "timeoutSec": 5
+            }
+        ],
+        "sessionEnd": [
+            {
+                "type": "command",
+                "bash": "if command -v py >/dev/null 2>&1; then py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" sessionEnd; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" sessionEnd; fi >/dev/null 2>&1; exit 0",
+                "powershell": "try { if (Get-Command py -ErrorAction SilentlyContinue) { py -3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" sessionEnd *> $null } elseif (Get-Command python3 -ErrorAction SilentlyContinue) { python3 -I \"${PLUGIN_ROOT}/hooks/nuff_pulse_copilot.py\" sessionEnd *> $null } } catch {}; exit 0",
+                "timeoutSec": 5
+            }
+        ]
+    }
+}

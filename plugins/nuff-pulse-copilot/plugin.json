@@ -1,0 +1,21 @@
+{
+    "name": "nuff-pulse-copilot",
+    "version": "1.0.0",
+    "description": "GitHub Copilot only (Copilot CLI, the GitHub Copilot app, VS Code's Copilot agent host): hooks that record when a session's turn is done or the session ends to a local file for the nuff-pulse widget.",
+    "author": {
+        "name": "filip-be"
+    },
+    "homepage": "https://github.com/filip-be/nuff-plugin",
+    "repository": "https://github.com/filip-be/nuff-plugin",
+    "license": "MIT",
+    "keywords": [
+        "ai",
+        "ai-agent",
+        "enough",
+        "nuff",
+        "hooks",
+        "nuff-pulse",
+        "status",
+        "copilot"
+    ]
+}

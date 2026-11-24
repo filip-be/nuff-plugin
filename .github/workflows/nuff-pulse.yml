@@ -1,0 +1,122 @@
+# nuff-pulse: the widget (apps/nuff-pulse) and its hook plugins
+# (plugins/nuff-pulse-cc, plugins/nuff-pulse-copilot, shared source in
+# plugins/nuff-pulse). A tag apps/nuff-pulse/v<version> builds the widget and
+# publishes it as a GitHub release.
+name: nuff-pulse
+
+on:
+  push:
+    branches: [main]
+    tags: ["apps/nuff-pulse/v*"]
+    paths:
+      - "apps/nuff-pulse/**"
+      - "plugins/nuff-pulse/**"
+      - "plugins/nuff-pulse-cc/**"
+      - "plugins/nuff-pulse-copilot/**"
+      - ".claude-plugin/marketplace.json"
+      - ".github/workflows/nuff-pulse.yml"
+  pull_request:
+    paths:
+      - "apps/nuff-pulse/**"
+      - "plugins/nuff-pulse/**"
+      - "plugins/nuff-pulse-cc/**"
+      - "plugins/nuff-pulse-copilot/**"
+      - ".claude-plugin/marketplace.json"
+      - ".github/workflows/nuff-pulse.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuff-pulse-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  hooks:
+    name: Hook plugins (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The hooks run on Windows and, through Copilot CLI and Claude Code in
+        # WSL, on Linux.
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Unit tests (also check the shipped core copies match the source)
+        run: python -m unittest discover -s plugins/nuff-pulse/tests -v
+
+  widget:
+    name: Widget (test, clippy, build)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/nuff-pulse
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/nuff-pulse
+      - name: Test
+        run: cargo test --locked
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build release
+        run: cargo build --locked --release
+      - name: Check exe size (budget < 5 MB)
+        shell: pwsh
+        run: |
+          $size = (Get-Item target/release/nuff-pulse.exe).Length
+          "nuff-pulse.exe: {0:N2} MB" -f ($size / 1MB)
+          if ($size -ge 5MB) { throw "nuff-pulse.exe is $size bytes, over the 5 MB budget" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuff-pulse-exe
+          path: apps/nuff-pulse/target/release/nuff-pulse.exe
+          retention-days: 14
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/apps/nuff-pulse/v')
+    needs: [hooks, widget]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuff-pulse-exe
+          path: dist
+      - name: Package and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:TAG -replace '^apps/nuff-pulse/v', ''
+          $cargo = Get-Content apps/nuff-pulse/Cargo.toml -Raw
+          if ($cargo -notmatch "(?m)^version = `"$([regex]::Escape($version))`"") {
+            throw "Tag $env:TAG does not match the version in apps/nuff-pulse/Cargo.toml"
+          }
+          # Release notes: the CHANGELOG section of this version.
+          $lines = Get-Content apps/nuff-pulse/CHANGELOG.md
+          $start = [array]::FindIndex($lines, [Predicate[string]] { param($l) $l -match "^## $([regex]::Escape($version))\b" })
+          if ($start -lt 0) { throw "apps/nuff-pulse/CHANGELOG.md has no '## $version' section" }
+          $end = [array]::FindIndex($lines, $start + 1, [Predicate[string]] { param($l) $l -match '^## ' })
+          if ($end -lt 0) { $end = $lines.Count }
+          $lines[($start + 1)..($end - 1)] -join "`n" | Set-Content notes.md
+          $zip = "nuff-pulse-$version-windows-x64.zip"
+          Copy-Item apps/nuff-pulse/README.md, apps/nuff-pulse/CHANGELOG.md, apps/nuff-pulse/LICENCE dist/
+          Compress-Archive -Path dist/* -DestinationPath $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          gh release create $env:TAG $zip "$zip.sha256" --title "nuff-pulse $version" --notes-file notes.md

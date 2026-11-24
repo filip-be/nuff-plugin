@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{
+      "type": "command",
+      "bash": "python3 -I \"${PLUGIN_ROOT}/probe_hook.py\" sessionStart >/dev/null 2>&1 || true",
+      "powershell": "try { & py -3 -I \"${PLUGIN_ROOT}/probe_hook.py\" sessionStart *> $null } catch {}; exit 0",
+      "timeoutSec": 5
+    }],
+    "agentStop": [{
+      "type": "command",
+      "bash": "python3 -I \"${PLUGIN_ROOT}/probe_hook.py\" agentStop >/dev/null 2>&1 || true",
+      "powershell": "try { & py -3 -I \"${PLUGIN_ROOT}/probe_hook.py\" agentStop *> $null } catch {}; exit 0",
+      "timeoutSec": 5
+    }],
+    "sessionEnd": [{
+      "type": "command",
+      "bash": "python3 -I \"${PLUGIN_ROOT}/probe_hook.py\" sessionEnd >/dev/null 2>&1 || true",
+      "powershell": "try { & py -3 -I \"${PLUGIN_ROOT}/probe_hook.py\" sessionEnd *> $null } catch {}; exit 0",
+      "timeoutSec": 5
+    }]
+  }
+}

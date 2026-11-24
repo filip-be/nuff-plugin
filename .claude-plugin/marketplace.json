@@ -2,7 +2,7 @@
   "name": "nuff-plugin",
   "metadata": {
     "description": "Nuff plugin marketplace",
-    "version": "1.2.11"
+    "version": "1.3.0"
   },
   "owner": {
     "name": "filip-be"
@@ -32,6 +32,16 @@
       "name": "nuff-cc",
       "source": "./plugins/nuff-cc",
       "description": "Claude Code only: good enough Claude Code mods - a desktop status line (context size, prompt-cache countdown, session cost) and opening the session's folder in VS Code from a button above the prompt or /vscode."
+    },
+    {
+      "name": "nuff-pulse-cc",
+      "source": "./plugins/nuff-pulse-cc",
+      "description": "Claude Code only: hooks that record each session's state (working, needs you, done, error, ended) to a local file for the nuff-pulse widget."
+    },
+    {
+      "name": "nuff-pulse-copilot",
+      "source": "./plugins/nuff-pulse-copilot",
+      "description": "GitHub Copilot only (Copilot CLI, the GitHub Copilot app, VS Code's Copilot agent host): hooks that record when a session's turn is done or the session ends to a local file for the nuff-pulse widget."
     }
   ]
 }
