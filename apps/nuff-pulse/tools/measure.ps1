@@ -6,8 +6,9 @@ for it to settle, then samples it.
   pwsh tools/measure.ps1                 # bar only
   pwsh tools/measure.ps1 -App            # with the app window open
   pwsh tools/measure.ps1 -Seconds 120    # longer CPU sample
-  pwsh tools/measure.ps1 -Idle           # no sessions: an empty home folder
-                                         # (WSL distros are still read)
+  pwsh tools/measure.ps1 -Idle           # no sessions: empty home and settings
+                                         # folders (no extra roots); running
+                                         # WSL distros are still read
 #>
 param(
     [string]$Exe = "$PSScriptRoot\..\target\release\nuff-pulse.exe",
@@ -21,11 +22,11 @@ $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
 Get-Process nuff-pulse -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 500
-$saved = @{ USERPROFILE = $env:USERPROFILE; CLAUDE_CONFIG_DIR = $env:CLAUDE_CONFIG_DIR; COPILOT_HOME = $env:COPILOT_HOME }
+$saved = @{ USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA; CLAUDE_CONFIG_DIR = $env:CLAUDE_CONFIG_DIR; COPILOT_HOME = $env:COPILOT_HOME }
 if ($Idle) {
     $empty = Join-Path ([IO.Path]::GetTempPath()) 'nuff-pulse-measure-home'
     New-Item -ItemType Directory -Force $empty | Out-Null
-    $env:USERPROFILE = $empty; $env:CLAUDE_CONFIG_DIR = ''; $env:COPILOT_HOME = ''
+    $env:USERPROFILE = $empty; $env:APPDATA = $empty; $env:CLAUDE_CONFIG_DIR = ''; $env:COPILOT_HOME = ''
 }
 try {
     $p = Start-Process $Exe -ArgumentList @($(if ($App) { '--app' })) -PassThru

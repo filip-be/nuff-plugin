@@ -126,7 +126,9 @@ pub fn list(root: &Root) -> Vec<(PathBuf, FileRef, f64)> {
     // Windows roots ask each file: NTFS updates a listing's times lazily.
     let poll = root.poll;
     let mtime = |e: &std::fs::DirEntry| {
-        let m = if poll { e.metadata() } else { std::fs::metadata(e.path()) };
+        // A listing's metadata describes a link itself, not its target.
+        let link = e.file_type().is_ok_and(|t| t.is_symlink());
+        let m = if poll && !link { e.metadata() } else { std::fs::metadata(e.path()) };
         m.and_then(|m| m.modified()).map(crate::util::unix).unwrap_or(0.0)
     };
     let entries = |p: &Path| std::fs::read_dir(p).into_iter().flatten().flatten();

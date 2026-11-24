@@ -80,11 +80,11 @@ Test fixtures in `tests/fixtures/` are sanitized real sessions: `tools/probe.py 
 pwsh tools/measure.ps1 -Idle
 ```
 
-`tools/measure.ps1` stops a running widget, starts the release build and reports its private memory, CPU and exe size (`-App` opens the app window, `-Idle` starts it with an empty home folder).
+`tools/measure.ps1` stops a running widget, starts the release build and reports its private memory, CPU and exe size (`-App` opens the app window; `-Idle` starts it with empty home and settings folders, so only running WSL distros are read).
 
 ## Releasing
 
 CI (`.github/workflows/nuff-pulse.yml`) runs the tests, clippy and a release build on every change to the widget or its hook plugins. To release:
 
-1. Set `version` in `Cargo.toml` and rename `## Unreleased` in `CHANGELOG.md` to `## <version>`.
+1. Set `version` in `Cargo.toml`, run `cargo build` so `Cargo.lock` follows, rename `## Unreleased` in `CHANGELOG.md` to `## <version>` and commit all three. CI builds with `--locked` and the release job needs that CHANGELOG section, so a tag without them fails before anything is published.
 2. Push a tag `apps/nuff-pulse/v<version>`. CI checks that the tag matches `Cargo.toml`, builds the exe and publishes a GitHub release with `nuff-pulse-<version>-windows-x64.zip` (exe, README, CHANGELOG, licence), its SHA-256 and the CHANGELOG section as notes.
