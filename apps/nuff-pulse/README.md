@@ -80,7 +80,7 @@ Test fixtures in `tests/fixtures/` are sanitized real sessions: `tools/probe.py 
 pwsh tools/measure.ps1 -Idle
 ```
 
-`tools/measure.ps1` stops a running widget, starts the release build and reports its private memory, CPU and exe size (`-App` opens the app window; `-Idle` starts it with empty home and settings folders, so only running WSL distros are read).
+`tools/measure.ps1` stops a running widget, starts the release build and reports its private memory, CPU and exe size (`-App` opens the app window; `-Idle` starts it with empty home and settings folders, so only running WSL distros are read: stop their agents, or the distros, for a no-session figure).
 
 ## Releasing
 

@@ -8,7 +8,8 @@ for it to settle, then samples it.
   pwsh tools/measure.ps1 -Seconds 120    # longer CPU sample
   pwsh tools/measure.ps1 -Idle           # no sessions: empty home and settings
                                          # folders (no extra roots); running
-                                         # WSL distros are still read
+                                         # WSL distros are still read: stop
+                                         # their agents for a no-session figure
 #>
 param(
     [string]$Exe = "$PSScriptRoot\..\target\release\nuff-pulse.exe",
