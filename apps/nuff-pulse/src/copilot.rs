@@ -42,6 +42,8 @@ pub struct CopilotLog {
     pub last_request_t: Option<f64>,
     /// `usage.cacheExpiresAt` of the last main-thread request.
     pub request_cache_expires: Option<f64>,
+    /// Model of the last main-thread request.
+    pub last_request_model: Option<String>,
     pub checkpoint_t: Option<f64>,
     /// Per model, from the newest `session.usage_checkpoint`.
     pub cache_state: HashMap<String, CacheEntry>,
@@ -54,6 +56,8 @@ pub struct CopilotLog {
     open_asks: HashSet<String>,
     subagents: HashSet<String>,
     turn_requested_tools: bool,
+    /// The current turn wrote an `assistant.message`.
+    turn_has_message: bool,
 }
 
 fn is_subagent(v: &Value, data: &Value) -> bool {
@@ -81,6 +85,20 @@ impl CopilotLog {
         self.open_tools.last().map(|(_, label)| label.as_str())
     }
 
+    /// Drops everything that pairs a start with a later completion (open
+    /// tools, prompts, subagents) and the derived state. Called between the
+    /// head and the tail of a log whose middle was skipped: a start in the
+    /// head may have completed in the middle.
+    pub fn forget_open(&mut self) {
+        self.open_tools.clear();
+        self.open_permissions.clear();
+        self.open_asks.clear();
+        self.subagents.clear();
+        self.turn_requested_tools = false;
+        self.turn_has_message = false;
+        self.sig = None;
+    }
+
     fn blocked(&self) -> bool {
         !self.open_permissions.is_empty() || !self.open_asks.is_empty()
     }
@@ -98,6 +116,11 @@ impl CopilotLog {
             if let Some(exp) = entry.and_then(|e| e.expires) {
                 return Some(exp);
             }
+        }
+        // The last request only tells about its own model's cache; after a
+        // model switch the new model has no cache yet.
+        if self.last_request_model.is_some() && self.last_request_model.as_deref() != model {
+            return None;
         }
         if let Some(exp) = self.request_cache_expires {
             return Some(exp);
@@ -228,6 +251,7 @@ impl CopilotLog {
             }
             "assistant.turn_start" => {
                 self.turn_requested_tools = false;
+                self.turn_has_message = false;
                 if let Some(m) = util::s(data, "model") {
                     self.model = Some(m.to_string());
                 }
@@ -241,12 +265,14 @@ impl CopilotLog {
                 }
                 let requests = data.get("toolRequests").and_then(Value::as_array).is_some_and(|a| !a.is_empty());
                 self.turn_requested_tools = requests;
+                self.turn_has_message = true;
                 if let Some(t) = t {
                     self.set_unless_blocked(t, State::Working);
                 }
             }
             "assistant.turn_end" => {
-                let idle = !self.turn_requested_tools
+                let idle = self.turn_has_message
+                    && !self.turn_requested_tools
                     && self.open_tools.is_empty()
                     && !self.blocked()
                     && self.subagents.is_empty();
@@ -283,6 +309,7 @@ impl CopilotLog {
                 if let Some(m) = util::s(usage, "model") {
                     self.model = Some(m.to_string());
                 }
+                self.last_request_model = util::s(usage, "model").map(str::to_string);
                 if let Some(mp) = util::u(usage, "maxPromptTokens") {
                     self.max_prompt_tokens = Some(mp);
                 }
@@ -624,6 +651,36 @@ mod tests {
         assert_eq!(log.context_tokens, Some(7));
         assert_eq!(default_ttl("gpt-6.1"), 1800.0);
         assert_eq!(default_ttl("claude-sonnet"), 300.0);
+    }
+
+    #[test]
+    fn turn_without_a_message_is_not_done() {
+        let mut log = CopilotLog::new();
+        log.apply(&ev("assistant.turn_start", "01", r#"{"turnId":"0"}"#));
+        log.apply(&ev("assistant.turn_end", "02", r#"{"turnId":"0"}"#));
+        assert_eq!(log.sig.as_ref().unwrap().state, State::Working);
+    }
+
+    #[test]
+    fn model_switch_has_no_cache_yet() {
+        let mut log = CopilotLog::new();
+        log.apply(&ev("session.usage_record", "30", r#"{"usage":{"model":"gpt-a","inputTokens":5,"cacheExpiresAt":"2025-11-24T16:30:30Z"}}"#));
+        assert!(log.cache_expires().is_some());
+        log.apply(&ev("session.model_change", "40", r#"{"newModel":"claude-b"}"#));
+        assert_eq!(log.cache_expires(), None);
+    }
+
+    #[test]
+    fn forget_open_drops_pairs_from_a_skipped_middle() {
+        let mut log = CopilotLog::new();
+        log.apply(&ev("permission.requested", "01", r#"{"requestId":"p"}"#));
+        assert_eq!(log.sig.as_ref().unwrap().state, State::NeedsYou);
+        log.forget_open();
+        // Tail: the last turn ends normally.
+        log.apply(&ev("assistant.turn_start", "50", r#"{"turnId":"9"}"#));
+        log.apply(&ev("assistant.message", "51", r#"{"toolRequests":[]}"#));
+        log.apply(&ev("assistant.turn_end", "52", r#"{"turnId":"9"}"#));
+        assert_eq!(log.sig.as_ref().unwrap().state, State::Done);
     }
 
     #[test]

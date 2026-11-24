@@ -57,6 +57,13 @@ impl ClaudeLog {
         }
     }
 
+    /// Drops open tool calls and the derived state; called between the head
+    /// and the tail of a log whose middle was skipped.
+    pub fn forget_open(&mut self) {
+        self.open.clear();
+        self.sig = None;
+    }
+
     /// Running Agent/Task tool calls.
     pub fn subagents(&self) -> usize {
         self.open.iter().filter(|t| t.name == "Agent" || t.name == "Task").count()

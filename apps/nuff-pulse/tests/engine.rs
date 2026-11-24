@@ -211,10 +211,17 @@ fn claude_transcript_hooks_and_status() {
     let row = e.model.row(&k, &e.model.sessions[&k], last + 63.0);
     assert_eq!(row.state, Display::Working);
 
+    // `/clear`: the same process now runs another session.
+    let other = "99999999-2222-3333-4444-555555555555";
+    std::fs::write(&status, format!(r#"{{"pid":900,"sessionId":"{other}","status":"idle","statusUpdatedAt":{}}}"#, ((last + 4.0) * 1000.0) as u64)).unwrap();
+    e.poll(last + 130.0); // next rescan re-reads the status file
+    assert!(e.model.sessions[&k].status.is_none());
+    assert_eq!(e.model.sessions[&key(Runtime::Claude, other)].status.as_ref().unwrap().pid, 900);
+
     // The agent process dies: Ended.
     setup.world.lock().unwrap().alive.insert(900, false);
-    e.poll(last + 100.0);
-    assert_eq!(e.model.row(&k, &e.model.sessions[&k], last + 100.0).state, Display::Ended);
+    e.poll(last + 200.0);
+    assert_eq!(e.model.row(&k, &e.model.sessions[&k], last + 200.0).state, Display::Ended);
 }
 
 #[test]

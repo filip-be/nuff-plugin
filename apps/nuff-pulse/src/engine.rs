@@ -8,7 +8,7 @@ use crate::model::{Liveness, Model, Origin, Runtime, SessionKey, State, ACTIVE_W
 use crate::procs::{Hold, Probe, SystemProbe};
 use crate::pulse::{self, HookState};
 use crate::roots::{self, FileRef, Root, RootKind};
-use crate::tailer::Tailer;
+use crate::tailer::{Chunk, Tailer};
 use crate::util;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -251,10 +251,18 @@ impl Engine {
         let changed = match &fref {
             FileRef::ClaudeTranscript(id) => {
                 let key = self.key(root, Runtime::Claude, id);
-                self.tail(root, path, &fref).is_some_and(|lines| {
+                self.tail(root, path, &fref).is_some_and(|(chunk, mtime)| {
                     let s = self.model.session(key);
+                    if chunk.reset {
+                        s.claude = None;
+                    }
                     let log = s.claude.get_or_insert_with(ClaudeLog::new);
-                    lines.iter().for_each(|l| log.apply_line(l));
+                    if !chunk.head.is_empty() {
+                        chunk.head.iter().for_each(|l| log.apply_line(l));
+                        log.forget_open();
+                    }
+                    chunk.lines.iter().for_each(|l| log.apply_line(l));
+                    s.log_mtime = Some(mtime);
                     s.note_state();
                     true
                 })
@@ -262,10 +270,18 @@ impl Engine {
             FileRef::CopilotEvents(id) => {
                 let first = !self.files.contains_key(path);
                 let key = self.key(root, Runtime::Copilot, id);
-                let changed = self.tail(root, path, &fref).is_some_and(|lines| {
+                let changed = self.tail(root, path, &fref).is_some_and(|(chunk, mtime)| {
                     let s = self.model.session(key);
+                    if chunk.reset {
+                        s.copilot = None;
+                    }
                     let log = s.copilot.get_or_insert_with(CopilotLog::new);
-                    lines.iter().for_each(|l| log.apply_line(l));
+                    if !chunk.head.is_empty() {
+                        chunk.head.iter().for_each(|l| log.apply_line(l));
+                        log.forget_open();
+                    }
+                    chunk.lines.iter().for_each(|l| log.apply_line(l));
+                    s.log_mtime = Some(mtime);
                     s.note_state();
                     true
                 });
@@ -280,10 +296,12 @@ impl Engine {
             }
             FileRef::Pulse(rt, id) => {
                 let key = self.key(root, *rt, id);
-                self.tail(root, path, &fref).is_some_and(|lines| {
+                self.tail(root, path, &fref).is_some_and(|(chunk, _)| {
                     let s = self.model.session(key);
                     let mut any = false;
-                    for line in lines.iter().filter_map(|l| pulse::parse_line(l)) {
+                    // Hook lines merge newest-wins, so head + tail is safe.
+                    let lines = chunk.head.iter().chain(chunk.lines.iter());
+                    for line in lines.filter_map(|l| pulse::parse_line(l)) {
                         if line.runtime == *rt && line.session_id == *id {
                             s.hooks.apply(&line);
                             any = true;
@@ -306,6 +324,14 @@ impl Engine {
             FileRef::ClaudeStatus(_) => match self.read_whole(root, path, &fref).and_then(|t| ClaudeStatus::parse(&t)) {
                 Some(st) => {
                     let key = self.key(root, Runtime::Claude, &st.session_id);
+                    // The same process now runs another session (`/clear`):
+                    // its status no longer describes the old one.
+                    for (k, other) in self.model.sessions.iter_mut() {
+                        if *k != key && k.origin == key.origin && other.status.as_ref().is_some_and(|o| o.pid == st.pid) {
+                            other.status = None;
+                            other.note_state();
+                        }
+                    }
                     let s = self.model.session(key);
                     if s.status.as_ref() != Some(&st) {
                         s.status = Some(st);
@@ -327,8 +353,9 @@ impl Engine {
         }
     }
 
-    /// New complete lines of a log file, `None` when nothing new.
-    fn tail(&mut self, root: usize, path: &Path, fref: &FileRef) -> Option<Vec<String>> {
+    /// New complete lines of a log file and its modification time, `None`
+    /// when nothing new.
+    fn tail(&mut self, root: usize, path: &Path, fref: &FileRef) -> Option<(Chunk, f64)> {
         let t = self.files.entry(path.to_path_buf()).or_insert_with(|| Tracked {
             root,
             fref: fref.clone(),
@@ -336,9 +363,8 @@ impl Engine {
             stamp: None,
         });
         let chunk = t.tailer.as_mut()?.read().ok()?;
-        let mut lines = chunk.head;
-        lines.extend(chunk.lines);
-        (!lines.is_empty()).then_some(lines)
+        let mtime = std::fs::metadata(path).and_then(|m| m.modified()).map(util::unix).unwrap_or(0.0);
+        (chunk.reset || !chunk.head.is_empty() || !chunk.lines.is_empty()).then_some((chunk, mtime))
     }
 
     /// The text of a small file when it changed since the last read.

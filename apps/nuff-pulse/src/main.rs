@@ -102,12 +102,22 @@ fn main() {
         return;
     }
     let mut last_print = now;
+    // Time-driven changes (a provisional Done's alert after 3 s, a session
+    // leaving the 2 h window) change rows without any file change.
+    let shown = |rows: &[Row]| -> Vec<(String, &'static str, bool)> {
+        rows.iter().map(|r| (r.key.id.clone(), r.state.label(), r.alert)).collect()
+    };
+    let mut last_shown = shown(&engine.model.rows(now, today));
     loop {
         std::thread::sleep(Duration::from_millis(500));
         let now = util::now();
-        if engine.poll(now) || now - last_print >= 60.0 {
-            print_rows(&engine.model.rows(now, util::start_of_today(now)), now);
+        let changed = engine.poll(now);
+        let rows = engine.model.rows(now, util::start_of_today(now));
+        let current = shown(&rows);
+        if changed || current != last_shown || now - last_print >= 60.0 {
+            print_rows(&rows, now);
             last_print = now;
+            last_shown = current;
         }
     }
 }

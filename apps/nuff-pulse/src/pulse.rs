@@ -110,26 +110,31 @@ pub struct HookState {
     pub host: Option<HostInfo>,
     /// Session start reason (`startup`, `resume`, …) from the newest seed line.
     pub start_reason: Option<String>,
+    /// Time of the line each field above came from (cwd, log_path, host, start).
+    field_t: [f64; 4],
+}
+
+/// Sets `field` from `value` when `value` is present and `t` is not older
+/// than the line the field came from.
+fn merge<T: Clone>(field: &mut Option<T>, field_t: &mut f64, value: &Option<T>, t: f64) {
+    if value.is_some() && (field.is_none() || t >= *field_t) {
+        *field = value.clone();
+        *field_t = t;
+    }
 }
 
 impl HookState {
-    /// Applies a line; lines may arrive out of order, the newest `t` wins.
+    /// Applies a line; lines may arrive out of order: per field, the newest
+    /// line that has it wins.
     pub fn apply(&mut self, line: &PulseLine) {
-        let newer = self.last_t.is_none_or(|t| line.t >= t);
-        if newer {
-            self.last_t = Some(line.t);
-            if line.cwd.is_some() {
-                self.cwd = line.cwd.clone();
-            }
-            if line.log_path.is_some() {
-                self.log_path = line.log_path.clone();
-            }
-            if line.host.is_some() {
-                self.host = line.host.clone();
-            }
-            if line.state.is_none() {
-                self.start_reason = line.reason.clone();
-            }
+        let t = line.t;
+        self.last_t = Some(self.last_t.map_or(t, |x| x.max(t)));
+        let [ct, lt, ht, st] = &mut self.field_t;
+        merge(&mut self.cwd, ct, &line.cwd, t);
+        merge(&mut self.log_path, lt, &line.log_path, t);
+        merge(&mut self.host, ht, &line.host, t);
+        if line.state.is_none() {
+            merge(&mut self.start_reason, st, &line.reason, t);
         }
         if let Some(state) = line.state {
             if self.sig.as_ref().is_none_or(|s| line.t >= s.t) {
@@ -195,5 +200,18 @@ mod tests {
         assert_eq!(h.cwd.as_deref(), Some("c10"));
         h.apply(&mk(11.0, "working"));
         assert_eq!(h.sig.unwrap().state, State::Working);
+    }
+
+    #[test]
+    fn fields_merge_per_field() {
+        let mut h = HookState::default();
+        // A newer line without host, then an older line with it.
+        h.apply(&parse_line(r#"{"v":1,"t":20,"runtime":"claude","session_id":"a","state":"done"}"#).unwrap());
+        h.apply(&parse_line(r#"{"v":1,"t":10,"runtime":"claude","session_id":"a","cwd":"C:\\x","host":{"os":"windows","agent_pid":5}}"#).unwrap());
+        assert_eq!(h.host.as_ref().unwrap().agent_pid, Some(5));
+        assert_eq!(h.cwd.as_deref(), Some("C:\\x"));
+        assert_eq!(h.last_t, Some(20.0));
+        h.apply(&parse_line(r#"{"v":1,"t":5,"runtime":"claude","session_id":"a","cwd":"C:\\old"}"#).unwrap());
+        assert_eq!(h.cwd.as_deref(), Some("C:\\x"));
     }
 }

@@ -91,6 +91,8 @@ pub struct Session {
     pub lock: Option<LockProcess>,
     pub acked_t: f64,
     pub history: VecDeque<(f64, State)>,
+    /// Modification time of the session's log when last read.
+    pub log_mtime: Option<f64>,
 }
 
 impl Session {
@@ -153,9 +155,11 @@ impl Session {
         }
     }
 
-    /// Newest log write, status update or hook line.
+    /// Newest log write (record time or file modification time), status
+    /// update or hook line.
     pub fn last_activity(&self) -> f64 {
         [
+            self.log_mtime,
             self.claude.as_ref().and_then(|c| c.last_write_t),
             self.copilot.as_ref().and_then(|c| c.last_write_t),
             self.hooks.last_t,
