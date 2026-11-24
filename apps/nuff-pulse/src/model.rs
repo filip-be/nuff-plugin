@@ -285,8 +285,8 @@ fn builtin_window(model: &str) -> Option<u64> {
 pub struct Cost {
     /// Claude: list-price total (`cost-state.totalCostUSD`).
     pub usd: Option<f64>,
-    /// Copilot: premium requests and nano AI units, shown separately.
-    pub premium_requests: Option<f64>,
+    /// Copilot: GitHub AI credits used, in billionths of a credit
+    /// (`totalNanoAiu`). One AI credit is billed at $0.01.
     pub nano_aiu: Option<u64>,
 }
 
@@ -519,7 +519,6 @@ impl Model {
                     r.context_approx = l.context_approx;
                     r.model = l.model.clone();
                     r.effort = l.effort.clone();
-                    r.cost.premium_requests = l.premium_requests;
                     r.cost.nano_aiu = l.nano_aiu;
                     r.last_prompt = l.last_prompt.clone();
                     r.permission_mode = l.permission_mode.clone();

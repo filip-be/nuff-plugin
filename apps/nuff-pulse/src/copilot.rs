@@ -47,7 +47,7 @@ pub struct CopilotLog {
     pub checkpoint_t: Option<f64>,
     /// Per model, from the newest `session.usage_checkpoint`.
     pub cache_state: HashMap<String, CacheEntry>,
-    pub premium_requests: Option<f64>,
+    /// GitHub AI credits used so far, in billionths (`totalNanoAiu`).
     pub nano_aiu: Option<u64>,
     pub last_write_t: Option<f64>,
     pub sig: Option<Sig>,
@@ -379,9 +379,6 @@ impl CopilotLog {
     }
 
     fn read_cost(&mut self, data: &Value) {
-        if let Some(p) = util::f(data, "totalPremiumRequests") {
-            self.premium_requests = Some(p);
-        }
         if let Some(n) = util::u(data, "totalNanoAiu") {
             self.nano_aiu = Some(n);
         }
@@ -549,7 +546,6 @@ mod tests {
         assert_eq!(log.context_tokens, Some(22474 + 22379 + 92));
         assert!(!log.context_approx);
         assert_eq!(log.subagents(), 0);
-        assert_eq!(log.premium_requests, Some(1.0));
         assert_eq!(log.nano_aiu, Some(6657742000));
         // Checkpoint is newer than the last request: its expiry wins.
         let ttl = log.cache_state.get("gpt-6.1-sol").unwrap().ttl;

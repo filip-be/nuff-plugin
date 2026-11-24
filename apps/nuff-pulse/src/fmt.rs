@@ -148,6 +148,33 @@ pub fn resume(r: &Row) -> String {
 }
 
 /// `Claude CLI · shop` / `Copilot CLI · WSL Ubuntu · shop`.
+/// Dollars per GitHub AI credit.
+pub const USD_PER_AI_CREDIT: f64 = 0.01;
+
+/// Cost in dollars: Claude's list-price total, or Copilot's AI credits at
+/// $0.01 each. Empty when the session's log has no figure yet.
+pub fn cost(r: &Row) -> String {
+    if let Some(usd) = r.cost.usd {
+        format!("${usd:.2}")
+    } else if let Some(n) = r.cost.nano_aiu {
+        format!("${:.2}", ai_credits(n) * USD_PER_AI_CREDIT)
+    } else {
+        String::new()
+    }
+}
+
+/// The cost with Copilot's AI credits spelled out, for the detail pane.
+pub fn cost_detail(r: &Row) -> String {
+    match (r.cost.usd, r.cost.nano_aiu) {
+        (None, Some(n)) => format!("{} ({:.1} AI credits)", cost(r), ai_credits(n)),
+        _ => cost(r),
+    }
+}
+
+fn ai_credits(nano: u64) -> f64 {
+    nano as f64 / 1e9
+}
+
 pub fn place(r: &Row) -> String {
     let mut s = r.label.clone();
     if let crate::model::Origin::Wsl(d) = &r.key.origin {
@@ -225,5 +252,17 @@ mod tests {
         assert_eq!(place(&r), "Copilot CLI · WSL Ubuntu · shop");
         r.cwd = Some("/home/o'brien".into());
         assert_eq!(resume(&r), "cd '/home/o'\\''brien' && claude --resume abc");
+    }
+
+    #[test]
+    fn cost_in_dollars() {
+        let mut r = row(Display::Idle, false, None);
+        assert_eq!(cost(&r), "");
+        r.cost.usd = Some(3.421);
+        assert_eq!((cost(&r), cost_detail(&r)), ("$3.42".into(), "$3.42".into()));
+        r.cost.usd = None;
+        // 6.66 AI credits at $0.01 each.
+        r.cost.nano_aiu = Some(6_657_742_000);
+        assert_eq!((cost(&r), cost_detail(&r)), ("$0.07".into(), "$0.07 (6.7 AI credits)".into()));
     }
 }

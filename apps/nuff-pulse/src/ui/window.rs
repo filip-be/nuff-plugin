@@ -82,20 +82,6 @@ pub fn show(ui: &mut Ui, shared: &Shared, win: &Mutex<WinState>) {
     ctx.request_repaint_after(std::time::Duration::from_secs_f64(next.max(0.05)));
 }
 
-fn cost(r: &Row) -> String {
-    let mut parts = Vec::new();
-    if let Some(usd) = r.cost.usd {
-        parts.push(format!("${usd:.2}"));
-    }
-    if let Some(p) = r.cost.premium_requests {
-        parts.push(format!("{p} premium req."));
-    }
-    if let Some(n) = r.cost.nano_aiu {
-        parts.push(format!("{} nano AIU", fmt::tokens(n)));
-    }
-    parts.join(" · ")
-}
-
 fn sessions(ui: &mut Ui, shared: &Shared, w: &mut WinState, rows: &[Row], now: f64) {
     if w.selected.as_ref().is_none_or(|k| !rows.iter().any(|r| &r.key == k)) {
         w.selected = rows.first().map(|r| r.key.clone());
@@ -148,7 +134,7 @@ fn sessions(ui: &mut Ui, shared: &Shared, w: &mut WinState, rows: &[Row], now: f
                         None => ui.label(""),
                     };
                     ui.label(r.model.clone().unwrap_or_default());
-                    ui.label(cost(r));
+                    ui.label(fmt::cost(r));
                     ui.end_row();
                 }
             });
@@ -246,7 +232,7 @@ fn detail(ui: &mut Ui, shared: &Shared, r: &Row, now: f64) {
         if let Some(p) = &r.permission_mode {
             kv(ui, "Permission mode", p.as_str());
         }
-        let c = cost(r);
+        let c = fmt::cost_detail(r);
         if !c.is_empty() {
             kv(ui, "Cost", c);
         }

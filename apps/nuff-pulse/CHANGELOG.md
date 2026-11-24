@@ -9,5 +9,6 @@
 - Hide a session from the bar until its next activity: right-click its row (**Hide until active**) or use **Hide from bar** in the app window; **Show on bar** brings it back.
 - The app window opens at 1240 × 680, wide enough for every column of the session table next to the detail pane.
 - README screenshots of the bar (pill and list) and the app window.
+- Copilot cost is shown in dollars from the AI credits used (`totalNanoAiu`, $0.01 per credit) instead of premium requests and nano AIU.
 - WSL folders are listed with fewer calls across the WSL boundary (idle CPU about halved).
 - Install steps, resource measurements (`tools/measure.ps1`) and a CI workflow that tests, builds and releases the widget on tags `apps/nuff-pulse/v*`.
