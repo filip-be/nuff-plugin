@@ -82,6 +82,8 @@ struct Inner {
     tray: TrayState,
     hotkey: Option<(u32, u32)>,
     hotkey_ok: Option<bool>,
+    /// The hotkey `hotkey_ok` is the outcome for.
+    tried: Option<(u32, u32)>,
     /// The hotkey registered now.
     registered: Option<(u32, u32)>,
 }
@@ -112,7 +114,7 @@ thread_local! {
 impl Shell {
     /// Starts the shell thread. `on_event` runs on that thread.
     pub fn spawn(on_event: impl Fn(ShellEvent) + Send + 'static, hotkey: Option<(u32, u32)>, tray: TrayState) -> Option<Shell> {
-        let inner = Arc::new(Mutex::new(Inner { tray, hotkey, hotkey_ok: None, registered: None }));
+        let inner = Arc::new(Mutex::new(Inner { tray, hotkey, hotkey_ok: None, tried: None, registered: None }));
         let (tx, rx) = channel();
         let thread_inner = inner.clone();
         std::thread::Builder::new()
@@ -177,6 +179,13 @@ impl Shell {
     /// pending or when there is none.
     pub fn hotkey_ok(&self) -> Option<bool> {
         self.inner.lock().unwrap().hotkey_ok
+    }
+
+    /// The outcome of the last registration together with the hotkey it was
+    /// for, so a result is never taken for a later request's.
+    pub fn hotkey_result(&self) -> (Option<(u32, u32)>, Option<bool>) {
+        let i = self.inner.lock().unwrap();
+        (i.tried, i.hotkey_ok)
     }
 
     /// Removes the tray icon and ends the thread.
@@ -326,7 +335,11 @@ unsafe fn register_hotkey(hwnd: HWND) {
         _ => previous.filter(|p| wanted.is_some() && register(*p)),
     };
     let mut i = inner.lock().unwrap();
-    i.hotkey_ok = ok;
+    // A newer request arrived meanwhile: its own message reports.
+    if i.hotkey == wanted {
+        i.hotkey_ok = ok;
+        i.tried = wanted;
+    }
     i.registered = registered;
 }
 

@@ -355,7 +355,10 @@ impl eframe::App for App {
             }
             // A new hotkey is saved once it registered; one taken by another
             // app is dropped and the old one registered again.
-            match (ok, self.hotkey_pending.take()) {
+            let (tried, result) = shell.hotkey_result();
+            let pending = self.hotkey_pending.take();
+            let for_pending = pending.as_deref().is_some_and(|p| settings::parse_hotkey(p) == tried && tried.is_some());
+            match (if for_pending { result } else { None }, pending) {
                 (Some(true), Some(new)) => {
                     self.settings.hotkey = new;
                     if let Err(e) = self.settings.save() {
