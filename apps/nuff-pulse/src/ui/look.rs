@@ -1,15 +1,39 @@
 //! Colours and the state ring, shared by the bar and the app window.
 
-use eframe::egui::{self, epaint::PathShape, Color32, Pos2, Stroke, Ui};
+use eframe::egui::{self, Color32, Pos2, Stroke, Ui, epaint::PathShape};
 use nuff_pulse::model::{Display, Level};
 
 pub fn state_color(ui: &Ui, s: Display) -> Color32 {
     let dark = ui.visuals().dark_mode;
     match s {
-        Display::Working => if dark { Color32::from_rgb(0x60, 0xA5, 0xFA) } else { Color32::from_rgb(0x25, 0x63, 0xEB) },
-        Display::NeedsYou => if dark { Color32::from_rgb(0xFB, 0xBF, 0x24) } else { Color32::from_rgb(0xD9, 0x77, 0x06) },
-        Display::Done => if dark { Color32::from_rgb(0x4A, 0xDE, 0x80) } else { Color32::from_rgb(0x16, 0xA3, 0x4A) },
-        Display::Error => if dark { Color32::from_rgb(0xF8, 0x71, 0x71) } else { Color32::from_rgb(0xDC, 0x26, 0x26) },
+        Display::Working => {
+            if dark {
+                Color32::from_rgb(0x60, 0xA5, 0xFA)
+            } else {
+                Color32::from_rgb(0x25, 0x63, 0xEB)
+            }
+        }
+        Display::NeedsYou => {
+            if dark {
+                Color32::from_rgb(0xFB, 0xBF, 0x24)
+            } else {
+                Color32::from_rgb(0xD9, 0x77, 0x06)
+            }
+        }
+        Display::Done => {
+            if dark {
+                Color32::from_rgb(0x4A, 0xDE, 0x80)
+            } else {
+                Color32::from_rgb(0x16, 0xA3, 0x4A)
+            }
+        }
+        Display::Error => {
+            if dark {
+                Color32::from_rgb(0xF8, 0x71, 0x71)
+            } else {
+                Color32::from_rgb(0xDC, 0x26, 0x26)
+            }
+        }
         Display::Idle => ui.visuals().weak_text_color(),
         Display::Ended => ui.visuals().weak_text_color().gamma_multiply(0.6),
     }
@@ -19,8 +43,20 @@ pub fn level_color(ui: &Ui, l: Level) -> Color32 {
     let dark = ui.visuals().dark_mode;
     match l {
         Level::Ok => ui.visuals().text_color(),
-        Level::Amber => if dark { Color32::from_rgb(0xFB, 0xBF, 0x24) } else { Color32::from_rgb(0xB4, 0x53, 0x09) },
-        Level::Red => if dark { Color32::from_rgb(0xF8, 0x71, 0x71) } else { Color32::from_rgb(0xB9, 0x1C, 0x1C) },
+        Level::Amber => {
+            if dark {
+                Color32::from_rgb(0xFB, 0xBF, 0x24)
+            } else {
+                Color32::from_rgb(0xB4, 0x53, 0x09)
+            }
+        }
+        Level::Red => {
+            if dark {
+                Color32::from_rgb(0xF8, 0x71, 0x71)
+            } else {
+                Color32::from_rgb(0xB9, 0x1C, 0x1C)
+            }
+        }
     }
 }
 

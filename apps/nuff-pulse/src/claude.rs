@@ -48,7 +48,10 @@ pub struct ClaudeLog {
 
 impl ClaudeLog {
     pub fn new() -> Self {
-        ClaudeLog { cache_ttl: CACHE_TTL_5M, ..Default::default() }
+        ClaudeLog {
+            cache_ttl: CACHE_TTL_5M,
+            ..Default::default()
+        }
     }
 
     pub fn apply_line(&mut self, line: &str) {
@@ -66,7 +69,10 @@ impl ClaudeLog {
 
     /// Running Agent/Task tool calls.
     pub fn subagents(&self) -> usize {
-        self.open.iter().filter(|t| t.name == "Agent" || t.name == "Task").count()
+        self.open
+            .iter()
+            .filter(|t| t.name == "Agent" || t.name == "Task")
+            .count()
     }
 
     /// The most recent tool call still running, else `None`.
@@ -93,13 +99,18 @@ impl ClaudeLog {
             "custom-title" => self.custom_title = util::s(v, "customTitle").map(|x| short(x, 120)),
             "ai-title" => self.ai_title = util::s(v, "aiTitle").map(|x| short(x, 120)),
             "cost-state" => self.cost_usd = util::f(v, "totalCostUSD"),
-            "permission-mode" => self.permission_mode = util::s(v, "permissionMode").map(str::to_string),
+            "permission-mode" => {
+                self.permission_mode = util::s(v, "permissionMode").map(str::to_string)
+            }
             _ => {}
         }
         if kind != "user" && kind != "assistant" {
             return;
         }
-        let sidechain = v.get("isSidechain").and_then(Value::as_bool).unwrap_or(false);
+        let sidechain = v
+            .get("isSidechain")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         if sidechain {
             return;
         }
@@ -206,7 +217,11 @@ impl ClaudeLog {
                     .get("cache_creation")
                     .and_then(|c| util::u(c, "ephemeral_1h_input_tokens"))
                     .unwrap_or(0);
-                self.cache_ttl = if one_hour > 0 { CACHE_TTL_1H } else { CACHE_TTL_5M };
+                self.cache_ttl = if one_hour > 0 {
+                    CACHE_TTL_1H
+                } else {
+                    CACHE_TTL_5M
+                };
             }
         }
         if let Some(Value::Array(blocks)) = msg.get("content") {
@@ -215,8 +230,14 @@ impl ClaudeLog {
                     let name = util::s(b, "name").unwrap_or("tool").to_string();
                     let summary = tool_summary(&name, b.get("input").unwrap_or(&Value::Null));
                     self.activity = Some(summary.clone());
-                    if let Some(id) = util::s(b, "id") && !self.open.iter().any(|o| o.id == id) {
-                        self.open.push(OpenTool { id: id.to_string(), name, summary });
+                    if let Some(id) = util::s(b, "id")
+                        && !self.open.iter().any(|o| o.id == id)
+                    {
+                        self.open.push(OpenTool {
+                            id: id.to_string(),
+                            name,
+                            summary,
+                        });
                     }
                 }
             }
@@ -234,18 +255,38 @@ impl ClaudeLog {
         if self.sig.as_ref().is_some_and(|s| t < s.t) {
             return;
         }
-        self.sig = Some(Sig { t, state, reason: reason.map(str::to_string), detail: None, provisional });
+        self.sig = Some(Sig {
+            t,
+            state,
+            reason: reason.map(str::to_string),
+            detail: None,
+            provisional,
+        });
     }
 }
 
 /// `Bash: git status`, `Read: main.rs`, `Agent: Count files`.
 pub fn tool_summary(name: &str, input: &Value) -> String {
-    let arg = ["description", "command", "file_path", "path", "pattern", "url", "query", "prompt", "skill"]
-        .iter()
-        .find_map(|k| util::s(input, k));
+    let arg = [
+        "description",
+        "command",
+        "file_path",
+        "path",
+        "pattern",
+        "url",
+        "query",
+        "prompt",
+        "skill",
+    ]
+    .iter()
+    .find_map(|k| util::s(input, k));
     match arg {
         Some(a) => {
-            let a = if a.contains(['\\', '/']) && !a.contains(' ') { util::folder_name(a) } else { a.to_string() };
+            let a = if a.contains(['\\', '/']) && !a.contains(' ') {
+                util::folder_name(a)
+            } else {
+                a.to_string()
+            };
             format!("{name}: {}", short(&a, 60))
         }
         None => name.to_string(),
@@ -297,7 +338,13 @@ impl ClaudeStatus {
         };
         // No reason: `waiting` covers permission prompts and questions alike;
         // the hook line that raised it carries the details.
-        Some(Sig { t: self.status_t?, state, reason: None, detail: None, provisional: false })
+        Some(Sig {
+            t: self.status_t?,
+            state,
+            reason: None,
+            detail: None,
+            provisional: false,
+        })
     }
 }
 
@@ -379,7 +426,10 @@ mod tests {
         log.apply(&rec(r#"{"type":"assistant","isSidechain":true,"timestamp":"2025-11-24T16:00:09Z","message":{"model":"claude-x","stop_reason":"tool_use"}}"#));
         assert_eq!(log.sig.as_ref().unwrap().state, State::Done);
         log.apply(&rec(r#"{"type":"user","timestamp":"2025-11-24T16:00:10Z","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#));
-        assert_eq!(log.sig.as_ref().unwrap().reason.as_deref(), Some("interrupted"));
+        assert_eq!(
+            log.sig.as_ref().unwrap().reason.as_deref(),
+            Some("interrupted")
+        );
     }
 
     #[test]

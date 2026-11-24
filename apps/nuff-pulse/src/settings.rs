@@ -73,9 +73,10 @@ impl Settings {
 
     /// `%APPDATA%\nuff-pulse\settings.toml` (`~/.config/nuff-pulse` elsewhere).
     pub fn path() -> Option<PathBuf> {
-        let base = std::env::var_os("APPDATA").filter(|v| !v.is_empty()).map(PathBuf::from).or_else(|| {
-            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))
-        })?;
+        let base = std::env::var_os("APPDATA")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
         Some(base.join("nuff-pulse").join("settings.toml"))
     }
 
@@ -87,26 +88,40 @@ impl Settings {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Settings::default(),
             // Exists but unreadable: use defaults and leave the file alone.
-            Err(_) => return Settings { save_blocked: true, ..Default::default() },
+            Err(_) => {
+                return Settings {
+                    save_blocked: true,
+                    ..Default::default()
+                };
+            }
         };
-        let parsed = std::str::from_utf8(&bytes).map_err(|e| e.to_string()).and_then(Settings::try_parse);
+        let parsed = std::str::from_utf8(&bytes)
+            .map_err(|e| e.to_string())
+            .and_then(Settings::try_parse);
         match parsed {
             Ok(s) => s,
             Err(_) => {
                 let kept = std::fs::copy(path, path.with_extension("toml.bad")).is_ok();
-                Settings { save_blocked: !kept, ..Default::default() }
+                Settings {
+                    save_blocked: !kept,
+                    ..Default::default()
+                }
             }
         }
     }
 
     pub fn load() -> Settings {
-        Settings::path().map(|p| Settings::load_from(&p)).unwrap_or_default()
+        Settings::path()
+            .map(|p| Settings::load_from(&p))
+            .unwrap_or_default()
     }
 
     /// Writes through a temporary file so a crash never leaves half a file.
     pub fn save_to(&self, path: &Path) -> std::io::Result<()> {
         if self.save_blocked {
-            return Err(std::io::Error::other("the settings file could not be read or backed up; not overwriting it"));
+            return Err(std::io::Error::other(
+                "the settings file could not be read or backed up; not overwriting it",
+            ));
         }
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -130,13 +145,24 @@ impl Settings {
             .filter(|r| !r.path.trim().is_empty())
             .filter_map(|r| {
                 let kind = parse_kind(&r.kind)?;
-                Some(Root { kind, path: PathBuf::from(r.path.trim()), origin: Origin::Windows, poll: r.poll })
+                Some(Root {
+                    kind,
+                    path: PathBuf::from(r.path.trim()),
+                    origin: Origin::Windows,
+                    poll: r.poll,
+                })
             })
             .collect()
     }
 
     pub fn config(&self) -> Config {
-        Config { context_windows: self.context_windows.iter().map(|(k, v)| (k.clone(), *v)).collect() }
+        Config {
+            context_windows: self
+                .context_windows
+                .iter()
+                .map(|(k, v)| (k.clone(), *v))
+                .collect(),
+        }
     }
 }
 
@@ -226,12 +252,19 @@ mod tests {
     fn round_trip_and_defaults() {
         let mut s = Settings::default();
         s.bar_positions.insert("0,0,2560x1440".into(), [100, -20]);
-        s.extra_roots.push(ExtraRoot { kind: "copilot".into(), path: "E:\\c".into(), poll: true });
+        s.extra_roots.push(ExtraRoot {
+            kind: "copilot".into(),
+            path: "E:\\c".into(),
+            poll: true,
+        });
         s.context_windows.insert("claude-opus".into(), 1_000_000);
         assert_eq!(Settings::parse(&s.to_toml()), s);
         // Missing fields take defaults; a broken file is ignored.
         let p = Settings::parse("bar_mode = \"pill\"\n");
-        assert_eq!((p.bar_mode, p.hotkey.as_str(), p.bar_visible), (BarMode::Pill, DEFAULT_HOTKEY, true));
+        assert_eq!(
+            (p.bar_mode, p.hotkey.as_str(), p.bar_visible),
+            (BarMode::Pill, DEFAULT_HOTKEY, true)
+        );
         assert_eq!(Settings::parse("hotkey = [").hotkey, DEFAULT_HOTKEY);
     }
 
@@ -243,13 +276,29 @@ mod tests {
         let path = dir.join("settings.toml");
         std::fs::write(&path, "hotkey = [\n").unwrap();
         assert_eq!(Settings::load_from(&path), Settings::default());
-        assert_eq!(std::fs::read_to_string(dir.join("settings.toml.bad")).unwrap(), "hotkey = [\n");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("settings.toml.bad")).unwrap(),
+            "hotkey = [\n"
+        );
         // Not UTF-8: also kept aside.
         std::fs::write(&path, [0xFFu8, 0xFE, 0x00]).unwrap();
         assert_eq!(Settings::load_from(&path), Settings::default());
-        assert_eq!(std::fs::read(dir.join("settings.toml.bad")).unwrap(), vec![0xFF, 0xFE, 0x00]);
-        assert!(Settings { save_blocked: true, ..Default::default() }.save_to(&path).is_err());
-        let s = Settings { hotkey: "Ctrl+Alt+K".into(), ..Default::default() };
+        assert_eq!(
+            std::fs::read(dir.join("settings.toml.bad")).unwrap(),
+            vec![0xFF, 0xFE, 0x00]
+        );
+        assert!(
+            Settings {
+                save_blocked: true,
+                ..Default::default()
+            }
+            .save_to(&path)
+            .is_err()
+        );
+        let s = Settings {
+            hotkey: "Ctrl+Alt+K".into(),
+            ..Default::default()
+        };
         s.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path), s);
         std::fs::remove_dir_all(&dir).unwrap();
@@ -258,20 +307,41 @@ mod tests {
     #[test]
     fn roots_and_config() {
         let mut s = Settings::default();
-        s.extra_roots.push(ExtraRoot { kind: "Claude".into(), path: " D:\\x\\.claude ".into(), poll: false });
-        s.extra_roots.push(ExtraRoot { kind: "nope".into(), path: "D:\\y".into(), poll: false });
-        s.extra_roots.push(ExtraRoot { kind: "pulse".into(), path: "".into(), poll: false });
+        s.extra_roots.push(ExtraRoot {
+            kind: "Claude".into(),
+            path: " D:\\x\\.claude ".into(),
+            poll: false,
+        });
+        s.extra_roots.push(ExtraRoot {
+            kind: "nope".into(),
+            path: "D:\\y".into(),
+            poll: false,
+        });
+        s.extra_roots.push(ExtraRoot {
+            kind: "pulse".into(),
+            path: "".into(),
+            poll: false,
+        });
         let r = s.roots();
         assert_eq!(r.len(), 1);
-        assert_eq!((r[0].kind, r[0].path.clone()), (RootKind::Claude, PathBuf::from("D:\\x\\.claude")));
+        assert_eq!(
+            (r[0].kind, r[0].path.clone()),
+            (RootKind::Claude, PathBuf::from("D:\\x\\.claude"))
+        );
         s.context_windows.insert("gpt".into(), 5);
         assert_eq!(s.config().context_window(Some("gpt-6"), None), Some(5));
     }
 
     #[test]
     fn hotkeys() {
-        assert_eq!(parse_hotkey("Win+Alt+P"), Some((MOD_WIN | MOD_ALT, 'P' as u32)));
-        assert_eq!(parse_hotkey("ctrl + shift + f12"), Some((MOD_CONTROL | MOD_SHIFT, 0x7B)));
+        assert_eq!(
+            parse_hotkey("Win+Alt+P"),
+            Some((MOD_WIN | MOD_ALT, 'P' as u32))
+        );
+        assert_eq!(
+            parse_hotkey("ctrl + shift + f12"),
+            Some((MOD_CONTROL | MOD_SHIFT, 0x7B))
+        );
         assert_eq!(parse_hotkey("Alt+Space"), Some((MOD_ALT, 0x20)));
         assert_eq!(parse_hotkey("P"), None);
         assert_eq!(parse_hotkey("Win+P+Q"), None);

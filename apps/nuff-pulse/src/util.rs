@@ -13,7 +13,9 @@ pub fn now() -> f64 {
 
 /// Unix seconds of a `SystemTime` (file modification times).
 pub fn unix(t: SystemTime) -> f64 {
-    t.duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+    t.duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// Parses an RFC 3339 / ISO 8601 timestamp such as `2026-11-24T09:52:21.190Z`
@@ -122,7 +124,8 @@ pub fn f(v: &Value, key: &str) -> Option<f64> {
 /// `v[key]` as a non-negative integer.
 pub fn u(v: &Value, key: &str) -> Option<u64> {
     let x = v.get(key)?;
-    x.as_u64().or_else(|| x.as_f64().filter(|n| *n >= 0.0).map(|n| n as u64))
+    x.as_u64()
+        .or_else(|| x.as_f64().filter(|n| *n >= 0.0).map(|n| n as u64))
 }
 
 /// Last path component of a Windows or POSIX path.
@@ -145,7 +148,10 @@ mod tests {
         let t = parse_iso("2025-11-24T16:00:00.250Z").unwrap();
         assert!((t - 1764000000.25).abs() < 1e-6);
         assert_eq!(parse_iso("2025-11-24T17:00:00+01:00"), Some(1764000000.0));
-        assert_eq!(parse_iso("2025-11-24T16:00:00.914000Z").map(|t| (t * 1000.0).round()), Some(1764000000914.0));
+        assert_eq!(
+            parse_iso("2025-11-24T16:00:00.914000Z").map(|t| (t * 1000.0).round()),
+            Some(1764000000914.0)
+        );
         assert_eq!(parse_iso("nope"), None);
         assert_eq!(parse_iso("2025-13-01T00:00:00Z"), None);
     }

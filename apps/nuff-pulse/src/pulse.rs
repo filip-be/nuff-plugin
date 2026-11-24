@@ -64,7 +64,11 @@ pub fn parse_line(line: &str) -> Option<PulseLine> {
         pids: h
             .get("pids")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(|p| p.as_u64().and_then(|p| u32::try_from(p).ok())).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| p.as_u64().and_then(|p| u32::try_from(p).ok()))
+                    .collect()
+            })
             .unwrap_or_default(),
     });
     let text = |k: &str| util::s(&v, k).map(str::to_string);
@@ -83,7 +87,11 @@ pub fn parse_line(line: &str) -> Option<PulseLine> {
 }
 
 pub fn valid_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 128 && id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
 }
 
 /// `claude-<id>.hooks.jsonl` → (Claude, id).
@@ -136,7 +144,9 @@ impl HookState {
         if line.state.is_none() {
             merge(&mut self.start_reason, st, &line.reason, t);
         }
-        if let Some(state) = line.state && self.sig.as_ref().is_none_or(|s| line.t >= s.t) {
+        if let Some(state) = line.state
+            && self.sig.as_ref().is_none_or(|s| line.t >= s.t)
+        {
             self.sig = Some(Sig {
                 t: line.t,
                 state,
@@ -173,15 +183,23 @@ mod tests {
         assert!(parse_line(r#"{"v":1,"t":1,"runtime":"other","session_id":"a"}"#).is_none());
         assert!(parse_line(r#"{"v":1,"t":1,"runtime":"claude","session_id":"../x"}"#).is_none());
         assert!(parse_line(r#"{"t":1,"runtime":"claude","session_id":"a"}"#).is_none());
-        let min = parse_line(r#"{"v":1,"t":1,"runtime":"copilot","session_id":"a","state":"bogus"}"#).unwrap();
+        let min =
+            parse_line(r#"{"v":1,"t":1,"runtime":"copilot","session_id":"a","state":"bogus"}"#)
+                .unwrap();
         assert_eq!(min.state, None);
         assert!(min.host.is_none());
     }
 
     #[test]
     fn file_names() {
-        assert_eq!(parse_file_name("claude-abc-1.hooks.jsonl"), Some((Runtime::Claude, "abc-1".into())));
-        assert_eq!(parse_file_name("copilot-x.hooks.jsonl"), Some((Runtime::Copilot, "x".into())));
+        assert_eq!(
+            parse_file_name("claude-abc-1.hooks.jsonl"),
+            Some((Runtime::Claude, "abc-1".into()))
+        );
+        assert_eq!(
+            parse_file_name("copilot-x.hooks.jsonl"),
+            Some((Runtime::Copilot, "x".into()))
+        );
         assert_eq!(parse_file_name("claude-abc.jsonl"), None);
         assert_eq!(parse_file_name("other-abc.hooks.jsonl"), None);
     }
@@ -204,12 +222,18 @@ mod tests {
     fn fields_merge_per_field() {
         let mut h = HookState::default();
         // A newer line without host, then an older line with it.
-        h.apply(&parse_line(r#"{"v":1,"t":20,"runtime":"claude","session_id":"a","state":"done"}"#).unwrap());
+        h.apply(
+            &parse_line(r#"{"v":1,"t":20,"runtime":"claude","session_id":"a","state":"done"}"#)
+                .unwrap(),
+        );
         h.apply(&parse_line(r#"{"v":1,"t":10,"runtime":"claude","session_id":"a","cwd":"C:\\x","host":{"os":"windows","agent_pid":5}}"#).unwrap());
         assert_eq!(h.host.as_ref().unwrap().agent_pid, Some(5));
         assert_eq!(h.cwd.as_deref(), Some("C:\\x"));
         assert_eq!(h.last_t, Some(20.0));
-        h.apply(&parse_line(r#"{"v":1,"t":5,"runtime":"claude","session_id":"a","cwd":"C:\\old"}"#).unwrap());
+        h.apply(
+            &parse_line(r#"{"v":1,"t":5,"runtime":"claude","session_id":"a","cwd":"C:\\old"}"#)
+                .unwrap(),
+        );
         assert_eq!(h.cwd.as_deref(), Some("C:\\x"));
     }
 }

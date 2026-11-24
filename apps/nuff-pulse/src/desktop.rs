@@ -1,18 +1,21 @@
 //! Windows desktop helpers for the widget: monitors, window placement,
 //! showing without activation, autostart (HKCU Run) and single instance.
 
-use windows_sys::Win32::Foundation::{GetLastError, HWND, LPARAM, POINT, RECT, ERROR_ALREADY_EXISTS};
+use windows_sys::Win32::Foundation::{
+    ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, POINT, RECT,
+};
 use windows_sys::Win32::Graphics::Gdi::{
-    EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, HDC, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONULL,
+    EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONULL, MONITORINFO,
+    MonitorFromPoint,
 };
 use windows_sys::Win32::System::Registry::{
-    RegCloseKey, RegDeleteKeyValueW, RegGetValueW, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE,
-    REG_SZ, RRF_RT_REG_SZ,
+    HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_SZ, RRF_RT_REG_SZ, RegCloseKey, RegDeleteKeyValueW,
+    RegGetValueW, RegOpenKeyExW, RegSetValueExW,
 };
 use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetWindowRect, IsWindowVisible, SetWindowPos, ShowWindow, SystemParametersInfoW, HWND_TOPMOST, SPI_GETWORKAREA,
-    SWP_NOACTIVATE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE,
+    GetWindowRect, HWND_TOPMOST, IsWindowVisible, SPI_GETWORKAREA, SW_HIDE, SW_SHOWNOACTIVATE,
+    SWP_NOACTIVATE, SWP_NOSIZE, SetWindowPos, ShowWindow, SystemParametersInfoW,
 };
 
 pub fn wide(s: &str) -> Vec<u16> {
@@ -34,13 +37,25 @@ pub fn monitors() -> Vec<[i32; 4]> {
         }
     }
     let mut out: Vec<[i32; 4]> = Vec::new();
-    unsafe { EnumDisplayMonitors(std::ptr::null_mut(), std::ptr::null(), Some(each), &mut out as *mut _ as LPARAM) };
+    unsafe {
+        EnumDisplayMonitors(
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            Some(each),
+            &mut out as *mut _ as LPARAM,
+        )
+    };
     out
 }
 
 /// The primary monitor's work area (without the taskbar).
 pub fn work_area() -> [i32; 4] {
-    let mut r = RECT { left: 0, top: 0, right: 1920, bottom: 1080 };
+    let mut r = RECT {
+        left: 0,
+        top: 0,
+        right: 1920,
+        bottom: 1080,
+    };
     unsafe { SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut r as *mut RECT as *mut _, 0) };
     [r.left, r.top, r.right, r.bottom]
 }
@@ -51,7 +66,12 @@ pub fn on_screen(x: i32, y: i32) -> bool {
 }
 
 pub fn window_rect(hwnd: isize) -> Option<[i32; 4]> {
-    let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+    let mut r = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
     let ok = unsafe { GetWindowRect(hwnd as HWND, &mut r) } != 0;
     ok.then_some([r.left, r.top, r.right, r.bottom])
 }
@@ -59,17 +79,34 @@ pub fn window_rect(hwnd: isize) -> Option<[i32; 4]> {
 /// Moves a window (physical pixels) without resizing or activating it, and
 /// keeps it topmost.
 pub fn move_window(hwnd: isize, x: i32, y: i32) {
-    unsafe { SetWindowPos(hwnd as HWND, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE) };
+    unsafe {
+        SetWindowPos(
+            hwnd as HWND,
+            HWND_TOPMOST,
+            x,
+            y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOACTIVATE,
+        )
+    };
 }
 
 /// Shows (without taking focus from the app in front) or hides a window.
 pub fn set_visible(hwnd: isize, visible: bool) {
-    unsafe { ShowWindow(hwnd as HWND, if visible { SW_SHOWNOACTIVATE } else { SW_HIDE }) };
+    unsafe {
+        ShowWindow(
+            hwnd as HWND,
+            if visible { SW_SHOWNOACTIVATE } else { SW_HIDE },
+        )
+    };
 }
 
 /// Windows 11 rounded corners for a borderless window (no-op before).
 pub fn round_corners(hwnd: isize) {
-    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND};
+    use windows_sys::Win32::Graphics::Dwm::{
+        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
+    };
     let pref = DWMWCP_ROUND;
     unsafe {
         DwmSetWindowAttribute(
@@ -114,13 +151,29 @@ pub fn set_autostart(on: bool) -> bool {
             let r = RegDeleteKeyValueW(HKEY_CURRENT_USER, key_path.as_ptr(), value.as_ptr());
             return r == 0 || r == 2; // ERROR_FILE_NOT_FOUND: already off
         }
-        let Ok(exe) = std::env::current_exe() else { return false };
+        let Ok(exe) = std::env::current_exe() else {
+            return false;
+        };
         let data = wide(&format!("\"{}\"", exe.display()));
         let mut key: HKEY = std::ptr::null_mut();
-        if RegOpenKeyExW(HKEY_CURRENT_USER, key_path.as_ptr(), 0, KEY_SET_VALUE, &mut key) != 0 {
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            key_path.as_ptr(),
+            0,
+            KEY_SET_VALUE,
+            &mut key,
+        ) != 0
+        {
             return false;
         }
-        let r = RegSetValueExW(key, value.as_ptr(), 0, REG_SZ, data.as_ptr() as *const u8, (data.len() * 2) as u32);
+        let r = RegSetValueExW(
+            key,
+            value.as_ptr(),
+            0,
+            REG_SZ,
+            data.as_ptr() as *const u8,
+            (data.len() * 2) as u32,
+        );
         RegCloseKey(key);
         r == 0
     }

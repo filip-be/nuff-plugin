@@ -83,7 +83,11 @@ pub fn hold_state(path: &Path) -> Hold {
     }
     #[cfg(not(windows))]
     {
-        return if path.exists() { Hold::Unknown } else { Hold::Missing };
+        return if path.exists() {
+            Hold::Unknown
+        } else {
+            Hold::Missing
+        };
     }
     #[allow(unreachable_code)]
     match o.open(path) {
@@ -98,7 +102,8 @@ pub fn hold_state(path: &Path) -> Hold {
 pub fn snapshot() -> HashMap<u32, ProcInfo> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
+        TH32CS_SNAPPROCESS,
     };
     let mut out = HashMap::new();
     unsafe {
@@ -110,9 +115,20 @@ pub fn snapshot() -> HashMap<u32, ProcInfo> {
         e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
         let mut ok = Process32FirstW(snap, &mut e);
         while ok != 0 {
-            let len = e.szExeFile.iter().position(|&c| c == 0).unwrap_or(e.szExeFile.len());
+            let len = e
+                .szExeFile
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(e.szExeFile.len());
             let exe = String::from_utf16_lossy(&e.szExeFile[..len]);
-            out.insert(e.th32ProcessID, ProcInfo { pid: e.th32ProcessID, ppid: e.th32ParentProcessID, exe });
+            out.insert(
+                e.th32ProcessID,
+                ProcInfo {
+                    pid: e.th32ProcessID,
+                    ppid: e.th32ParentProcessID,
+                    exe,
+                },
+            );
             ok = Process32NextW(snap, &mut e);
         }
         CloseHandle(snap);
@@ -143,7 +159,10 @@ pub fn process_created(pid: u32) -> Option<f64> {
         }
         let mut code = 0u32;
         let running = GetExitCodeProcess(h, &mut code) != 0 && code == STILL_ACTIVE as u32;
-        let zero = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+        let zero = FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
         let (mut c, mut e, mut k, mut u) = (zero, zero, zero, zero);
         let ok = GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) != 0;
         CloseHandle(h);
@@ -171,7 +190,13 @@ mod tests {
         let p = SystemProbe::new();
         assert_eq!(p.alive(pid, Some(created)), Some(true));
         assert_eq!(p.alive(pid, Some(created - 100.0)), Some(false));
-        assert!(p.exe_and_parent(pid).unwrap().0.to_ascii_lowercase().ends_with(".exe"));
+        assert!(
+            p.exe_and_parent(pid)
+                .unwrap()
+                .0
+                .to_ascii_lowercase()
+                .ends_with(".exe")
+        );
     }
 
     #[test]

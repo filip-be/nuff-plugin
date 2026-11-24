@@ -138,12 +138,22 @@ pub fn tooltip(s: &Summary) -> String {
 /// PowerShell for Windows sessions, a POSIX shell for WSL ones. The command
 /// does not run when the folder cannot be entered.
 pub fn resume(r: &Row) -> String {
-    let Some(cwd) = r.cwd.as_deref().filter(|c| !c.is_empty()) else { return r.resume_command.clone() };
+    let Some(cwd) = r.cwd.as_deref().filter(|c| !c.is_empty()) else {
+        return r.resume_command.clone();
+    };
     match r.key.origin {
         crate::model::Origin::Windows => {
-            format!("Set-Location -LiteralPath '{}' -ErrorAction Stop; {}", cwd.replace('\'', "''"), r.resume_command)
+            format!(
+                "Set-Location -LiteralPath '{}' -ErrorAction Stop; {}",
+                cwd.replace('\'', "''"),
+                r.resume_command
+            )
         }
-        crate::model::Origin::Wsl(_) => format!("cd '{}' && {}", cwd.replace('\'', "'\\''"), r.resume_command),
+        crate::model::Origin::Wsl(_) => format!(
+            "cd '{}' && {}",
+            cwd.replace('\'', "'\\''"),
+            r.resume_command
+        ),
     }
 }
 
@@ -194,7 +204,11 @@ mod tests {
 
     fn row(state: Display, alert: bool, cache: Option<f64>) -> Row {
         let m = Model::default();
-        let key = SessionKey { runtime: Runtime::Claude, origin: Origin::Windows, id: "abc".into() };
+        let key = SessionKey {
+            runtime: Runtime::Claude,
+            origin: Origin::Windows,
+            id: "abc".into(),
+        };
         let mut r = m.row(&key, &Default::default(), 0.0);
         r.state = state;
         r.alert = alert;
@@ -230,10 +244,16 @@ mod tests {
             row(Display::Idle, false, Some(-5.0)),
         ];
         let s = summary(&rows, 0.0);
-        assert_eq!((s.active, s.alerts, s.blink, s.working, s.done), (4, 2, true, 1, 1));
+        assert_eq!(
+            (s.active, s.alerts, s.blink, s.working, s.done),
+            (4, 2, true, 1, 1)
+        );
         assert_eq!(s.urgent_cache, Some(100.0), "working sessions count too");
         assert_eq!(tooltip(&s), "nuff-pulse: 1 need you, 1 done, 1 working");
-        assert_eq!(tooltip(&Summary::default()), "nuff-pulse: no active sessions");
+        assert_eq!(
+            tooltip(&Summary::default()),
+            "nuff-pulse: no active sessions"
+        );
         // Seen but not answered: still blinks.
         assert!(summary(&[row(Display::NeedsYou, false, None)], 0.0).blink);
         assert!(!summary(&[row(Display::Done, true, None)], 0.0).blink);
@@ -245,7 +265,10 @@ mod tests {
         r.resume_command = "claude --resume abc".into();
         assert_eq!(resume(&r), "claude --resume abc");
         r.cwd = Some("D:\\it's".into());
-        assert_eq!(resume(&r), "Set-Location -LiteralPath 'D:\\it''s' -ErrorAction Stop; claude --resume abc");
+        assert_eq!(
+            resume(&r),
+            "Set-Location -LiteralPath 'D:\\it''s' -ErrorAction Stop; claude --resume abc"
+        );
         r.label = "Copilot CLI".into();
         r.workspace = "shop".into();
         r.key.origin = Origin::Wsl("Ubuntu".into());
@@ -259,10 +282,16 @@ mod tests {
         let mut r = row(Display::Idle, false, None);
         assert_eq!(cost(&r), "");
         r.cost.usd = Some(3.421);
-        assert_eq!((cost(&r), cost_detail(&r)), ("$3.42".into(), "$3.42".into()));
+        assert_eq!(
+            (cost(&r), cost_detail(&r)),
+            ("$3.42".into(), "$3.42".into())
+        );
         r.cost.usd = None;
         // 6.66 AI credits at $0.01 each.
         r.cost.nano_aiu = Some(6_657_742_000);
-        assert_eq!((cost(&r), cost_detail(&r)), ("$0.07".into(), "$0.07 (6.7 AI credits)".into()));
+        assert_eq!(
+            (cost(&r), cost_detail(&r)),
+            ("$0.07".into(), "$0.07 (6.7 AI credits)".into())
+        );
     }
 }

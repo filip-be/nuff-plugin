@@ -10,23 +10,28 @@ use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateBitmap, CreateDIBSection, DeleteObject, GetMonitorInfoW, MonitorFromWindow, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-    DIB_RGB_COLORS, MONITORINFO, MONITOR_DEFAULTTONULL,
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateBitmap, CreateDIBSection, DIB_RGB_COLORS,
+    DeleteObject, GetMonitorInfoW, MONITOR_DEFAULTTONULL, MONITORINFO, MonitorFromWindow,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, UnregisterHotKey, MOD_NOREPEAT};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    MOD_NOREPEAT, RegisterHotKey, UnregisterHotKey,
+};
 use windows_sys::Win32::UI::Shell::{
-    SHQueryUserNotificationState, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
-    NOTIFYICONDATAW, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
+    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
+    QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
+    Shell_NotifyIconW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreateIconIndirect, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu,
-    DestroyWindow, DispatchMessageW, FindWindowW, GetClassNameW, GetCursorPos, GetForegroundWindow, GetMessageW,
-    GetSystemMetrics, GetWindowRect, GetWindowThreadProcessId, IsZoomed, KillTimer, PostMessageW, PostQuitMessage,
-    RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, SetTimer, TrackPopupMenu, TranslateMessage, HICON,
-    ICONINFO, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG, SM_CXSMICON, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON,
-    WM_APP, WM_CLOSE, WM_DESTROY, WM_DISPLAYCHANGE, WM_HOTKEY, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW,
+    AppendMenuW, CreateIconIndirect, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
+    DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowW, GetClassNameW, GetCursorPos,
+    GetForegroundWindow, GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowThreadProcessId,
+    HICON, ICONINFO, IsZoomed, KillTimer, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG, PostMessageW,
+    PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON, SetForegroundWindow,
+    SetTimer, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage,
+    WM_APP, WM_CLOSE, WM_DESTROY, WM_DISPLAYCHANGE, WM_HOTKEY, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP,
+    WM_TIMER, WNDCLASSEXW,
 };
 
 const CLASS: &str = "nuff-pulse-shell";
@@ -113,8 +118,18 @@ thread_local! {
 
 impl Shell {
     /// Starts the shell thread. `on_event` runs on that thread.
-    pub fn spawn(on_event: impl Fn(ShellEvent) + Send + 'static, hotkey: Option<(u32, u32)>, tray: TrayState) -> Option<Shell> {
-        let inner = Arc::new(Mutex::new(Inner { tray, hotkey, hotkey_ok: None, tried: None, registered: None }));
+    pub fn spawn(
+        on_event: impl Fn(ShellEvent) + Send + 'static,
+        hotkey: Option<(u32, u32)>,
+        tray: TrayState,
+    ) -> Option<Shell> {
+        let inner = Arc::new(Mutex::new(Inner {
+            tray,
+            hotkey,
+            hotkey_ok: None,
+            tried: None,
+            registered: None,
+        }));
         let (tx, rx) = channel();
         let thread_inner = inner.clone();
         std::thread::Builder::new()
@@ -125,7 +140,8 @@ impl Shell {
                 if hwnd.is_null() {
                     return;
                 }
-                let taskbar_created = unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) };
+                let taskbar_created =
+                    unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) };
                 CTX.with(|c| {
                     *c.borrow_mut() = Some(Ctx {
                         on_event: Box::new(on_event),
@@ -242,7 +258,8 @@ fn emit(ev: ShellEvent) {
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     unsafe {
-        let taskbar_created = CTX.with(|c| c.borrow().as_ref().map_or(u32::MAX, |x| x.taskbar_created));
+        let taskbar_created =
+            CTX.with(|c| c.borrow().as_ref().map_or(u32::MAX, |x| x.taskbar_created));
         match msg {
             WM_TRAY => {
                 match lp as u32 {
@@ -262,7 +279,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 0
             }
             WM_SHOW_INSTANCE => {
-                emit(if wp == 1 { ShellEvent::OpenApp } else { ShellEvent::ShowBar });
+                emit(if wp == 1 {
+                    ShellEvent::OpenApp
+                } else {
+                    ShellEvent::ShowBar
+                });
                 0
             }
             WM_HOTKEY => {
@@ -284,7 +305,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                     TIMER_FULLSCREEN => {
                         let now = fullscreen_in_front();
                         let changed = CTX.with(|c| {
-                            c.borrow_mut().as_mut().is_some_and(|ctx| std::mem::replace(&mut ctx.fullscreen, now) != now)
+                            c.borrow_mut().as_mut().is_some_and(|ctx| {
+                                std::mem::replace(&mut ctx.fullscreen, now) != now
+                            })
                         });
                         if changed {
                             emit(ShellEvent::Fullscreen(now));
@@ -326,13 +349,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
 
 unsafe fn register_hotkey(hwnd: HWND) {
     unsafe {
-        let Some(inner) = CTX.with(|c| c.borrow().as_ref().map(|x| x.inner.clone())) else { return };
+        let Some(inner) = CTX.with(|c| c.borrow().as_ref().map(|x| x.inner.clone())) else {
+            return;
+        };
         let (wanted, previous) = {
             let i = inner.lock().unwrap();
             (i.hotkey, i.registered)
         };
         UnregisterHotKey(hwnd, HOTKEY_ID);
-        let register = |(mods, vk): (u32, u32)| RegisterHotKey(hwnd, HOTKEY_ID, mods | MOD_NOREPEAT, vk) != 0;
+        let register =
+            |(mods, vk): (u32, u32)| RegisterHotKey(hwnd, HOTKEY_ID, mods | MOD_NOREPEAT, vk) != 0;
         let ok = wanted.map(register);
         let registered = match ok {
             Some(true) => wanted,
@@ -393,7 +419,11 @@ unsafe fn refresh_tray(hwnd: HWND) {
                     n.uFlags |= NIF_ICON;
                     n.hIcon = icon;
                 }
-                let ok = if ctx.tray_added { Shell_NotifyIconW(NIM_MODIFY, &n) } else { Shell_NotifyIconW(NIM_ADD, &n) } != 0;
+                let ok = if ctx.tray_added {
+                    Shell_NotifyIconW(NIM_MODIFY, &n)
+                } else {
+                    Shell_NotifyIconW(NIM_ADD, &n)
+                } != 0;
                 if !ctx.icon.is_null() {
                     DestroyIcon(ctx.icon);
                 }
@@ -436,17 +466,41 @@ unsafe fn make_icon(size: u32, rgba: &[u8]) -> HICON {
         bi.bmiHeader.biBitCount = 32;
         bi.bmiHeader.biCompression = BI_RGB;
         let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let color = CreateDIBSection(std::ptr::null_mut(), &bi, DIB_RGB_COLORS, &mut bits, std::ptr::null_mut(), 0);
+        let color = CreateDIBSection(
+            std::ptr::null_mut(),
+            &bi,
+            DIB_RGB_COLORS,
+            &mut bits,
+            std::ptr::null_mut(),
+            0,
+        );
         if color.is_null() || bits.is_null() {
             return std::ptr::null_mut();
         }
         let dst = std::slice::from_raw_parts_mut(bits as *mut u8, (size * size * 4) as usize);
-        for (d, s) in dst.as_chunks_mut::<4>().0.iter_mut().zip(rgba.as_chunks::<4>().0) {
+        for (d, s) in dst
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(rgba.as_chunks::<4>().0)
+        {
             *d = [s[2], s[1], s[0], s[3]];
         }
         let mask_bytes = vec![0u8; (size.div_ceil(16) * 2 * size) as usize];
-        let mask = CreateBitmap(size as i32, size as i32, 1, 1, mask_bytes.as_ptr() as *const _);
-        let info = ICONINFO { fIcon: 1, xHotspot: 0, yHotspot: 0, hbmMask: mask, hbmColor: color };
+        let mask = CreateBitmap(
+            size as i32,
+            size as i32,
+            1,
+            1,
+            mask_bytes.as_ptr() as *const _,
+        );
+        let info = ICONINFO {
+            fIcon: 1,
+            xHotspot: 0,
+            yHotspot: 0,
+            hbmMask: mask,
+            hbmColor: color,
+        };
         let icon = CreateIconIndirect(&info);
         DeleteObject(color);
         DeleteObject(mask);
@@ -456,7 +510,11 @@ unsafe fn make_icon(size: u32, rgba: &[u8]) -> HICON {
 
 unsafe fn show_menu(hwnd: HWND) {
     unsafe {
-        let bar_visible = CTX.with(|c| c.borrow().as_ref().is_some_and(|x| x.inner.lock().unwrap().tray.bar_visible));
+        let bar_visible = CTX.with(|c| {
+            c.borrow()
+                .as_ref()
+                .is_some_and(|x| x.inner.lock().unwrap().tray.bar_visible)
+        });
         let autostart = desktop::autostart_enabled();
         let menu = CreatePopupMenu();
         if menu.is_null() {
@@ -477,7 +535,15 @@ unsafe fn show_menu(hwnd: HWND) {
         GetCursorPos(&mut pt);
         // Without this the menu does not close when clicking elsewhere.
         SetForegroundWindow(hwnd);
-        let cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, hwnd, std::ptr::null());
+        let cmd = TrackPopupMenu(
+            menu,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
+            pt.x,
+            pt.y,
+            0,
+            hwnd,
+            std::ptr::null(),
+        );
         PostMessageW(hwnd, WM_NULL, 0, 0);
         DestroyMenu(menu);
         match cmd as usize {
@@ -499,7 +565,9 @@ unsafe fn show_menu(hwnd: HWND) {
 fn fullscreen_in_front() -> bool {
     unsafe {
         let mut q = 0;
-        if SHQueryUserNotificationState(&mut q) == 0 && (q == QUNS_RUNNING_D3D_FULL_SCREEN || q == QUNS_PRESENTATION_MODE) {
+        if SHQueryUserNotificationState(&mut q) == 0
+            && (q == QUNS_RUNNING_D3D_FULL_SCREEN || q == QUNS_PRESENTATION_MODE)
+        {
             return true;
         }
         let fg = GetForegroundWindow();
@@ -514,10 +582,18 @@ fn fullscreen_in_front() -> bool {
         let mut class = [0u16; 64];
         let n = GetClassNameW(fg, class.as_mut_ptr(), class.len() as i32).max(0) as usize;
         let class = String::from_utf16_lossy(&class[..n]);
-        if matches!(class.as_str(), "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd") {
+        if matches!(
+            class.as_str(),
+            "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
+        ) {
             return false;
         }
-        let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        let mut r = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
         let mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONULL);
         if mon.is_null() || GetWindowRect(fg, &mut r) == 0 {
             return false;

@@ -28,7 +28,10 @@ struct Canvas {
 
 impl Canvas {
     fn new(size: usize) -> Canvas {
-        Canvas { size, px: vec![0; size * size * 4] }
+        Canvas {
+            size,
+            px: vec![0; size * size * 4],
+        }
     }
 
     /// Blends `color` at coverage `a` (0..1) over pixel (x, y).
@@ -54,7 +57,11 @@ impl Canvas {
             for x in 0..self.size {
                 let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
                 let outer = (r - d + 0.5).clamp(0.0, 1.0);
-                let inside = if inner > 0.0 { (d - inner + 0.5).clamp(0.0, 1.0) } else { 1.0 };
+                let inside = if inner > 0.0 {
+                    (d - inner + 0.5).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
                 self.blend(x, y, color, outer * inside);
             }
         }
@@ -73,8 +80,10 @@ impl Canvas {
                         if x < 0 || y < 0 {
                             continue;
                         }
-                        let cov_x = ((x as f32 + 1.0).min(gx + cell) - (x as f32).max(gx)).clamp(0.0, 1.0);
-                        let cov_y = ((y as f32 + 1.0).min(gy + cell) - (y as f32).max(gy)).clamp(0.0, 1.0);
+                        let cov_x =
+                            ((x as f32 + 1.0).min(gx + cell) - (x as f32).max(gx)).clamp(0.0, 1.0);
+                        let cov_y =
+                            ((y as f32 + 1.0).min(gy + cell) - (y as f32).max(gy)).clamp(0.0, 1.0);
                         self.blend(x as usize, y as usize, color, cov_x * cov_y);
                     }
                 }
@@ -126,7 +135,10 @@ mod tests {
         assert_eq!(&badged[i..i + 4], &[BADGE[0], BADGE[1], BADGE[2], 255]);
         assert_ne!(badged, plain);
         let dark = render(32, 3, false);
-        assert_ne!(dark, plain, "the other blink frame differs even without alerts");
+        assert_ne!(
+            dark, plain,
+            "the other blink frame differs even without alerts"
+        );
         assert_eq!(dark, render(32, 0, false), "and has no badge");
         assert_ne!(render(16, 12, true), render(16, 0, true));
     }

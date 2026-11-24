@@ -7,7 +7,7 @@
 //! means the turn stopped (Done). A failed liveness check ends the session.
 
 use crate::claude::{self, ClaudeLog, ClaudeStatus};
-use crate::copilot::{self, CopilotLog, LockProcess, Workspace, PROVISIONAL_DONE_DELAY};
+use crate::copilot::{self, CopilotLog, LockProcess, PROVISIONAL_DONE_DELAY, Workspace};
 use crate::pulse::HookState;
 use crate::util;
 use std::collections::{HashMap, VecDeque};
@@ -107,7 +107,10 @@ pub struct Session {
 
 impl Session {
     pub fn log_sig(&self) -> Option<&Sig> {
-        self.claude.as_ref().and_then(|c| c.sig.as_ref()).or(self.copilot.as_ref().and_then(|c| c.sig.as_ref()))
+        self.claude
+            .as_ref()
+            .and_then(|c| c.sig.as_ref())
+            .or(self.copilot.as_ref().and_then(|c| c.sig.as_ref()))
     }
 
     /// The reduced state, `None` before any signal.
@@ -130,9 +133,13 @@ impl Session {
         for (src, s) in sigs {
             let next = if src == STATUS && s.state == State::Idle {
                 match &cur {
-                    Some(c) if matches!(c.state, State::Working | State::NeedsYou) => {
-                        Sig { t: s.t, state: State::Done, reason: None, detail: None, provisional: false }
-                    }
+                    Some(c) if matches!(c.state, State::Working | State::NeedsYou) => Sig {
+                        t: s.t,
+                        state: State::Done,
+                        reason: None,
+                        detail: None,
+                        provisional: false,
+                    },
                     Some(c) => c.clone(),
                     None => s,
                 }
@@ -141,18 +148,40 @@ impl Session {
             };
             // Same state without its own reason keeps the earlier details.
             cur = Some(match cur {
-                Some(c) if c.state == next.state && next.reason.is_none() && next.detail.is_none() => {
-                    Sig { t: next.t, provisional: next.provisional && c.provisional, ..c }
+                Some(c)
+                    if c.state == next.state && next.reason.is_none() && next.detail.is_none() =>
+                {
+                    Sig {
+                        t: next.t,
+                        provisional: next.provisional && c.provisional,
+                        ..c
+                    }
                 }
                 _ => next,
             });
         }
-        if let Some(c) = self.cleared_t && cur.as_ref().is_none_or(|x| x.t <= c && x.state != State::Ended) {
-            cur = Some(Sig { t: c, state: State::Ended, reason: Some("cleared".into()), detail: None, provisional: false });
+        if let Some(c) = self.cleared_t
+            && cur
+                .as_ref()
+                .is_none_or(|x| x.t <= c && x.state != State::Ended)
+        {
+            cur = Some(Sig {
+                t: c,
+                state: State::Ended,
+                reason: Some("cleared".into()),
+                detail: None,
+                provisional: false,
+            });
         }
         if self.live == Liveness::NotLive && cur.as_ref().is_none_or(|c| c.state != State::Ended) {
             let t = cur.as_ref().map_or(self.live_t, |c| c.t.max(self.live_t));
-            cur = Some(Sig { t, state: State::Ended, reason: Some("not_live".into()), detail: None, provisional: false });
+            cur = Some(Sig {
+                t,
+                state: State::Ended,
+                reason: Some("not_live".into()),
+                detail: None,
+                provisional: false,
+            });
         }
         cur
     }
@@ -231,7 +260,10 @@ pub enum Level {
 
 /// Context: amber ≥ 60 % (or ≥ 300k), red ≥ 80 % (or ≥ 500k).
 pub fn context_level(tokens: u64, window: Option<u64>) -> Level {
-    let pct = window.filter(|w| *w > 0).map(|w| tokens as f64 / w as f64).unwrap_or(0.0);
+    let pct = window
+        .filter(|w| *w > 0)
+        .map(|w| tokens as f64 / w as f64)
+        .unwrap_or(0.0);
     if pct >= 0.8 || tokens >= 500_000 {
         Level::Red
     } else if pct >= 0.6 || tokens >= 300_000 {
@@ -371,7 +403,9 @@ impl Model {
     pub fn prune(&mut self, now: f64, keep_since: f64) {
         self.sessions.retain(|_, s| {
             let last = s.last_activity();
-            last >= keep_since || (now - last < ACTIVE_WINDOW && s.reduce().is_none_or(|x| x.state != State::Ended))
+            last >= keep_since
+                || (now - last < ACTIVE_WINDOW
+                    && s.reduce().is_none_or(|x| x.state != State::Ended))
         });
     }
 
@@ -411,7 +445,10 @@ impl Model {
             State::Done if !unacked => (Display::Idle, false),
             State::Done => {
                 let provisional = sig.as_ref().is_some_and(|x| x.provisional);
-                (Display::Done, !provisional || now - since >= PROVISIONAL_DONE_DELAY)
+                (
+                    Display::Done,
+                    !provisional || now - since >= PROVISIONAL_DONE_DELAY,
+                )
             }
         };
         let last_activity = s.last_activity();
@@ -464,7 +501,9 @@ impl Model {
         match key.runtime {
             Runtime::Claude => {
                 let log = s.claude.as_ref();
-                let entry = log.and_then(|l| l.entrypoint.as_deref()).or(s.status.as_ref().and_then(|x| x.entrypoint.as_deref()));
+                let entry = log
+                    .and_then(|l| l.entrypoint.as_deref())
+                    .or(s.status.as_ref().and_then(|x| x.entrypoint.as_deref()));
                 r.label = claude::label(entry).to_string();
                 r.title = log
                     .and_then(ClaudeLog::title)
@@ -503,13 +542,23 @@ impl Model {
             Runtime::Copilot => {
                 let log = s.copilot.as_ref();
                 let ws = s.workspace.as_ref();
-                r.label = copilot::label(ws.and_then(|w| w.client_name.as_deref()), s.lock.as_ref(), wsl).to_string();
+                r.label = copilot::label(
+                    ws.and_then(|w| w.client_name.as_deref()),
+                    s.lock.as_ref(),
+                    wsl,
+                )
+                .to_string();
                 r.title = ws
                     .and_then(|w| w.name.clone())
                     .or(log.and_then(|l| l.first_prompt.clone()))
                     .unwrap_or_default();
-                r.cwd = log.and_then(|l| l.cwd.clone()).or(ws.and_then(|w| w.cwd.clone())).or(s.hooks.cwd.clone());
-                r.branch = log.and_then(|l| l.branch.clone()).or(ws.and_then(|w| w.branch.clone()));
+                r.cwd = log
+                    .and_then(|l| l.cwd.clone())
+                    .or(ws.and_then(|w| w.cwd.clone()))
+                    .or(s.hooks.cwd.clone());
+                r.branch = log
+                    .and_then(|l| l.branch.clone())
+                    .or(ws.and_then(|w| w.branch.clone()));
                 if let Some(l) = log {
                     r.activity = l.activity().map(str::to_string);
                     r.subagents = l.subagents();
@@ -523,8 +572,9 @@ impl Model {
                     r.cache_expires = l.cache_expires();
                     r.cache_ttl = l.cache_ttl();
                 }
-                r.context_window =
-                    self.config.context_window(r.model.as_deref(), log.and_then(|l| l.max_prompt_tokens));
+                r.context_window = self
+                    .config
+                    .context_window(r.model.as_deref(), log.and_then(|l| l.max_prompt_tokens));
                 r.resume_command = format!("copilot --resume {}", key.id);
                 if !wsl {
                     r.focus_pid = s.lock_pid;
@@ -534,7 +584,11 @@ impl Model {
         }
         r.workspace = r.cwd.as_deref().map(util::folder_name).unwrap_or_default();
         if r.title.is_empty() {
-            r.title = if r.workspace.is_empty() { key.id.chars().take(8).collect() } else { r.workspace.clone() };
+            r.title = if r.workspace.is_empty() {
+                key.id.chars().take(8).collect()
+            } else {
+                r.workspace.clone()
+            };
         }
         if let Some(c) = r.context {
             r.context_level = context_level(c, r.context_window);
@@ -554,7 +608,13 @@ mod tests {
     use crate::pulse;
 
     fn sig(t: f64, state: State) -> Sig {
-        Sig { t, state, reason: None, detail: None, provisional: false }
+        Sig {
+            t,
+            state,
+            reason: None,
+            detail: None,
+            provisional: false,
+        }
     }
 
     fn hook_line(t: f64, state: &str, reason: &str) -> pulse::PulseLine {
@@ -581,13 +641,17 @@ mod tests {
         let mut log = ClaudeLog::new();
         log.sig = Some(sig(10.0, State::Working));
         log.last_write_t = Some(10.0);
-        Session { claude: Some(log), ..Default::default() }
+        Session {
+            claude: Some(log),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn newest_source_wins() {
         let mut s = claude_session();
-        s.hooks.apply(&hook_line(20.0, "needs_you", "permission_prompt"));
+        s.hooks
+            .apply(&hook_line(20.0, "needs_you", "permission_prompt"));
         assert_eq!(s.reduce().unwrap().state, State::NeedsYou);
         // The user approves: the status file turns busy at once.
         s.status = Some(status(25.0, "busy"));
@@ -608,7 +672,10 @@ mod tests {
         s.status = Some(status(21.0, "idle"));
         assert_eq!(s.reduce().unwrap().state, State::Done);
         // Idle after Done stays Done; idle on a fresh session is Idle.
-        let fresh = Session { status: Some(status(1.0, "idle")), ..Default::default() };
+        let fresh = Session {
+            status: Some(status(1.0, "idle")),
+            ..Default::default()
+        };
         assert_eq!(fresh.reduce().unwrap().state, State::Idle);
     }
 
@@ -618,7 +685,10 @@ mod tests {
         s.hooks.apply(&hook_line(20.0, "needs_you", "question"));
         s.status = Some(status(20.5, "waiting"));
         let r = s.reduce().unwrap();
-        assert_eq!((r.state, r.reason.as_deref()), (State::NeedsYou, Some("question")));
+        assert_eq!(
+            (r.state, r.reason.as_deref()),
+            (State::NeedsYou, Some("question"))
+        );
     }
 
     #[test]
@@ -631,7 +701,11 @@ mod tests {
     }
 
     fn key() -> SessionKey {
-        SessionKey { runtime: Runtime::Claude, origin: Origin::Windows, id: "s".into() }
+        SessionKey {
+            runtime: Runtime::Claude,
+            origin: Origin::Windows,
+            id: "s".into(),
+        }
     }
 
     #[test]
@@ -652,7 +726,10 @@ mod tests {
     fn provisional_done_alerts_after_delay() {
         let mut m = Model::default();
         let mut s = claude_session();
-        s.claude.as_mut().unwrap().sig = Some(Sig { provisional: true, ..sig(20.0, State::Done) });
+        s.claude.as_mut().unwrap().sig = Some(Sig {
+            provisional: true,
+            ..sig(20.0, State::Done)
+        });
         m.sessions.insert(key(), s);
         assert!(!m.row(&key(), &m.sessions[&key()], 21.0).alert);
         assert!(m.row(&key(), &m.sessions[&key()], 23.5).alert);
@@ -677,13 +754,23 @@ mod tests {
         m.sessions.insert(key(), s);
         m.hide(&key(), 30.0);
         let r = m.row(&key(), &m.sessions[&key()], 31.0);
-        assert_eq!((r.active, r.hidden, r.alert, r.state), (false, true, false, Display::Idle));
+        assert_eq!(
+            (r.active, r.hidden, r.alert, r.state),
+            (false, true, false, Display::Idle)
+        );
         // Still listed for the app window, even before `today`.
         assert_eq!(m.rows(31.0, 1e12).len(), 1);
         // New activity brings it back, with its alert.
-        m.sessions.get_mut(&key()).unwrap().hooks.apply(&hook_line(40.0, "needs_you", "permission_prompt"));
+        m.sessions.get_mut(&key()).unwrap().hooks.apply(&hook_line(
+            40.0,
+            "needs_you",
+            "permission_prompt",
+        ));
         let r = m.row(&key(), &m.sessions[&key()], 41.0);
-        assert_eq!((r.active, r.hidden, r.alert, r.state), (true, false, true, Display::NeedsYou));
+        assert_eq!(
+            (r.active, r.hidden, r.alert, r.state),
+            (true, false, true, Display::NeedsYou)
+        );
         // Unhide shows it without new activity.
         m.hide(&key(), 50.0);
         assert!(m.row(&key(), &m.sessions[&key()], 51.0).hidden);
@@ -701,10 +788,18 @@ mod tests {
         assert_eq!(cache_level(16.0 * 60.0), Level::Ok);
         assert_eq!(cache_level(60.0), Level::Amber);
         assert_eq!(cache_level(0.0), Level::Red);
-        let cfg = Config { context_windows: vec![("claude".into(), 1), ("claude-opus".into(), 2)] };
+        let cfg = Config {
+            context_windows: vec![("claude".into(), 1), ("claude-opus".into(), 2)],
+        };
         assert_eq!(cfg.context_window(Some("claude-opus-5"), Some(9)), Some(2));
         assert_eq!(cfg.context_window(Some("gpt-6"), Some(9)), Some(9));
-        assert_eq!(Config::default().context_window(Some("claude-x"), None), None);
-        assert_eq!(Config::default().context_window(Some("claude-opus[1m]"), None), Some(1_000_000));
+        assert_eq!(
+            Config::default().context_window(Some("claude-x"), None),
+            None
+        );
+        assert_eq!(
+            Config::default().context_window(Some("claude-opus[1m]"), None),
+            Some(1_000_000)
+        );
     }
 }
