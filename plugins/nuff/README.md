@@ -1,5 +1,8 @@
 # nuff
 
+> [!WARNING]
+> **nuff is deprecated.** Its four-phase workflow turned out to be too heavy for day-to-day work, and it is no longer developed. It stays installable for existing users.
+
 > Take an Azure DevOps work item and do _enough_ work to get it done.
 
 **nuff** is an AI-powered workflow plugin that turns Azure DevOps work items into implemented, verified code through a structured four-phase pipeline. It works with both **GitHub Copilot** (VS Code & CLI) and **Claude Code**.
