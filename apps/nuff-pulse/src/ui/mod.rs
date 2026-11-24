@@ -127,8 +127,9 @@ struct App {
     layout: String,
     /// Bar top-left last placed or seen (physical pixels).
     placed: Option<[i32; 2]>,
-    /// The hotkey before a change that is still being registered.
-    hotkey_before: Option<String>,
+    /// A new hotkey being registered; it reaches the settings file only once
+    /// registration succeeded.
+    hotkey_pending: Option<String>,
     save_position_at: Option<f64>,
     placed_once: bool,
     last_size: egui::Vec2,
@@ -179,7 +180,7 @@ impl App {
             quitting: false,
             layout: String::new(),
             placed: None,
-            hotkey_before: None,
+            hotkey_pending: None,
             save_position_at: None,
             placed_once: false,
             last_size: egui::Vec2::ZERO,
@@ -295,6 +296,8 @@ impl App {
                     self.apply_bar_visibility();
                 }
                 ShellEvent::LayoutChanged => self.place_bar(),
+                // Handled in `logic` from the shell's hotkey state.
+                ShellEvent::HotkeyRegistered => {}
                 ShellEvent::Quit => {
                     self.quitting = true;
                     ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
@@ -307,17 +310,18 @@ impl App {
             s.bar_positions = self.settings.bar_positions.clone();
             s.bar_mode = self.settings.bar_mode;
             s.bar_visible = self.settings.bar_visible;
-            let hotkey_changed = s.hotkey != self.settings.hotkey;
-            if hotkey_changed {
-                self.hotkey_before = Some(self.settings.hotkey.clone());
-            }
+            let candidate = s.hotkey.clone();
+            let hotkey_changed = candidate != self.settings.hotkey;
+            // The file keeps the working hotkey until the new one registers.
+            s.hotkey = self.settings.hotkey.clone();
             s.save_blocked = self.settings.save_blocked;
             self.settings = s;
             let saved = self.settings.save();
             self.shared.send(Cmd::Settings(self.settings.clone()));
             let shell = self.shared.shell.lock().unwrap().clone();
             if let (true, Some(shell)) = (hotkey_changed, shell) {
-                shell.set_hotkey(settings::parse_hotkey(&self.settings.hotkey));
+                self.hotkey_pending = Some(candidate.clone());
+                shell.set_hotkey(settings::parse_hotkey(&candidate));
             }
             let mut w = self.win.lock().unwrap();
             w.status = match saved {
@@ -349,17 +353,21 @@ impl eframe::App for App {
                 w.hotkey_ok = ok;
                 ctx.request_repaint_of(app_viewport());
             }
-            // A new hotkey taken by another app: keep the old one, also in
-            // the file, so a restart does not end up with none.
-            match (ok, self.hotkey_before.take()) {
-                (Some(false), Some(before)) => {
-                    w.status = format!("{} is in use by another app; kept {before}.", self.settings.hotkey);
-                    w.edit.hotkey = before.clone();
-                    self.settings.hotkey = before;
-                    let _ = self.settings.save();
+            // A new hotkey is saved once it registered; one taken by another
+            // app is dropped and the old one registered again.
+            match (ok, self.hotkey_pending.take()) {
+                (Some(true), Some(new)) => {
+                    self.settings.hotkey = new;
+                    if let Err(e) = self.settings.save() {
+                        w.status = format!("Could not save: {e}");
+                    }
+                }
+                (Some(false), Some(new)) => {
+                    w.status = format!("{new} is in use by another app; kept {}.", self.settings.hotkey);
+                    w.edit.hotkey = self.settings.hotkey.clone();
                     shell.set_hotkey(settings::parse_hotkey(&self.settings.hotkey));
                 }
-                (None, Some(before)) => self.hotkey_before = Some(before), // still pending
+                (_, Some(new)) => self.hotkey_pending = Some(new), // still registering
                 _ => {}
             }
         }

@@ -62,6 +62,8 @@ pub enum ShellEvent {
     Fullscreen(bool),
     /// Monitors were added, removed or rearranged.
     LayoutChanged,
+    /// A hotkey change was registered or refused (see `Shell::hotkey_ok`).
+    HotkeyRegistered,
     Quit,
 }
 
@@ -244,6 +246,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         WM_REHOTKEY => {
             register_hotkey(hwnd);
+            emit(ShellEvent::HotkeyRegistered);
             0
         }
         WM_SHOW_INSTANCE => {
