@@ -1,0 +1,6 @@
+{
+  "name": "nuff-pulse-probe",
+  "version": "0.1.0",
+  "description": "Copilot only: local metadata probe for Nuff Pulse.",
+  "extensions": ["extensions/nuff-pulse-probe"]
+}
