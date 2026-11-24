@@ -121,36 +121,43 @@ pub fn copilot_dir(root: &Root, id: &str) -> PathBuf {
 
 /// Every readable file of a root with its modification time (Unix seconds).
 pub fn list(root: &Root) -> Vec<(PathBuf, FileRef, f64)> {
+    // Across the WSL boundary every file system call is a round trip, so a
+    // polled root takes types and times from the directory listing itself.
+    // Windows roots ask each file: NTFS updates a listing's times lazily.
+    let poll = root.poll;
+    let mtime = |e: &std::fs::DirEntry| {
+        let m = if poll { e.metadata() } else { std::fs::metadata(e.path()) };
+        m.and_then(|m| m.modified()).map(crate::util::unix).unwrap_or(0.0)
+    };
+    let entries = |p: &Path| std::fs::read_dir(p).into_iter().flatten().flatten();
+    let is_dir = |e: &std::fs::DirEntry| match e.file_type() {
+        Ok(t) if t.is_symlink() => e.path().is_dir(),
+        Ok(t) => t.is_dir(),
+        Err(_) => false,
+    };
     let mut out = Vec::new();
-    let mut push = |p: PathBuf| {
+    let mut push = |e: &std::fs::DirEntry| {
+        let p = e.path();
         if let Some(fr) = classify(root, &p) {
-            let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).map(crate::util::unix).unwrap_or(0.0);
-            out.push((p, fr, mtime));
+            let t = mtime(e);
+            out.push((p, fr, t));
         }
     };
-    let dir = |p: &Path| std::fs::read_dir(p).into_iter().flatten().flatten().map(|e| e.path());
     match root.kind {
         RootKind::Claude => {
-            for project in dir(&root.path.join("projects")) {
-                if project.is_dir() {
-                    dir(&project).filter(|p| p.extension().is_some_and(|e| e == "jsonl")).for_each(&mut push);
-                }
+            for project in entries(&root.path.join("projects")).filter(is_dir) {
+                entries(&project.path()).filter(|e| e.path().extension().is_some_and(|x| x == "jsonl")).for_each(|e| push(&e));
             }
-            dir(&root.path.join("sessions")).for_each(&mut push);
+            entries(&root.path.join("sessions")).for_each(|e| push(&e));
         }
         RootKind::Copilot => {
-            for session in dir(&root.path.join("session-state")) {
-                if session.is_dir() {
-                    for name in ["events.jsonl", "workspace.yaml"] {
-                        let p = session.join(name);
-                        if p.exists() {
-                            push(p);
-                        }
-                    }
-                }
+            for session in entries(&root.path.join("session-state")).filter(is_dir) {
+                entries(&session.path())
+                    .filter(|e| e.file_name() == "events.jsonl" || e.file_name() == "workspace.yaml")
+                    .for_each(|e| push(&e));
             }
         }
-        RootKind::Pulse => dir(&root.path.join("sessions")).for_each(&mut push),
+        RootKind::Pulse => entries(&root.path.join("sessions")).for_each(|e| push(&e)),
     }
     out
 }
@@ -188,5 +195,45 @@ mod tests {
         );
         assert_eq!(lock_pid("inuse.12.lock"), Some(12));
         assert_eq!(lock_pid("inuse.x.lock"), None);
+    }
+
+    #[test]
+    fn lists_files_watched_and_polled() {
+        let base = std::env::temp_dir().join(format!("nuff-pulse-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let mk = |rel: &str| {
+            let p = base.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "{}").unwrap();
+        };
+        mk("c/projects/D--x/0b1c-22.jsonl");
+        mk("c/projects/D--x/notes.txt");
+        mk("c/sessions/16624.json");
+        mk("k/session-state/ab-1/events.jsonl");
+        mk("k/session-state/ab-1/workspace.yaml");
+        mk("k/session-state/ab-1/session.db");
+        mk("p/sessions/copilot-ab-1.hooks.jsonl");
+        for poll in [false, true] {
+            let r = |kind, dir: &str| Root { kind, path: base.join(dir), origin: Origin::Windows, poll };
+            let names = |root: Root| {
+                let mut v: Vec<FileRef> = list(&root)
+                    .into_iter()
+                    .inspect(|(_, _, t)| assert!(*t > 0.0))
+                    .map(|(_, f, _)| f)
+                    .collect();
+                v.sort_by_key(|f| format!("{f:?}"));
+                v
+            };
+            assert_eq!(
+                names(r(RootKind::Claude, "c")),
+                vec![FileRef::ClaudeStatus(16624), FileRef::ClaudeTranscript("0b1c-22".into())]
+            );
+            assert_eq!(
+                names(r(RootKind::Copilot, "k")),
+                vec![FileRef::CopilotEvents("ab-1".into()), FileRef::CopilotWorkspace("ab-1".into())]
+            );
+            assert_eq!(names(r(RootKind::Pulse, "p")), vec![FileRef::Pulse(Runtime::Copilot, "ab-1".into())]);
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

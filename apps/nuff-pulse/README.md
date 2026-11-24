@@ -2,11 +2,22 @@
 
 A small Windows widget that lists your active local agent sessions from Claude Code and GitHub Copilot, with their state (Working, Needs you, Done, Error), context size and prompt-cache countdown.
 
-> Work in progress: install steps and a release come with the CI workflow.
+Windows 10 or 11 (x64). Claude Code and Copilot CLI sessions inside WSL are listed too.
 
-```powershell
-cargo run --release
-```
+## Install
+
+1. Download `nuff-pulse-<version>-windows-x64.zip` from the [nuff-plugin releases](https://github.com/filip-be/nuff-plugin/releases) (tags `apps/nuff-pulse/v*`). Each zip has a `.sha256` file next to it.
+2. Extract it to a folder of your own, for example `%LOCALAPPDATA%\Programs\nuff-pulse`, and run `nuff-pulse.exe`. The bar appears in the top-right corner and an icon appears in the tray. There is no installer.
+3. Optional: tick **Start with Windows** in the tray menu.
+4. Recommended: install the hook plugin of each agent you use. They make Needs you, Done and Ended exact; without them the widget infers these from the session logs. Both come from the `nuff-plugin` marketplace (`filip-be/nuff-plugin`) and need Python 3.10+ (the `py` launcher on Windows, `python3` in WSL):
+   - Claude Code: `/plugin marketplace add filip-be/nuff-plugin`, then `/plugin install nuff-pulse-cc@nuff-plugin`.
+   - GitHub Copilot: in Copilot CLI, `/plugin marketplace add filip-be/nuff-plugin`, then `/plugin install nuff-pulse-copilot@nuff-plugin`. The GitHub Copilot app and VS Code's Copilot agent host load Copilot CLI plugins too.
+
+   For agents inside WSL, install the plugin in the agent that runs in the distro.
+
+The exe is not code-signed, so SmartScreen may warn the first time; **More info → Run anyway** starts it.
+
+To update, quit the widget from the tray menu and replace `nuff-pulse.exe`. To uninstall, untick Start with Windows, quit, and delete the folder, `%APPDATA%\nuff-pulse` (settings) and `%USERPROFILE%\.nuff-pulse` (hook files).
 
 ## Using it
 
@@ -41,6 +52,18 @@ The widget works without the hook plugins, with less precise state: Done is then
 
 It only reads session files, except for deleting hook files of sessions that ended more than 24 hours ago (or that were untouched for 7 days).
 
+## Resources
+
+Measured with `tools/measure.ps1` on a Windows 11 machine with Intel integrated graphics (8 logical cores), release build:
+
+| | Private memory | CPU (one core) |
+| --- | --- | --- |
+| No sessions (`-Idle`), WSL distro running | 75 MB | 0.3 % |
+| ~20 sessions of the day, one working, bar as a list | 87 MB | 1.4 % (the ring turns 4 times a second) |
+| Same, app window open | 90 MB | 1.2 % |
+
+The exe is 4.6 MB. Most of the memory is the graphics driver's: the widget draws with OpenGL, and on this machine its OpenGL contexts alone take about 65 MB; reading and tracking the sessions takes about 7 MB (`nuff-pulse --watch`). The app window is created once, hidden, and shown on demand: destroying and recreating it leaked about 5 MB of driver memory per cycle. While idle the widget wakes every half second to check its files and every 5 s to list the folders of running WSL distros, which is most of its idle CPU.
+
 ## Development
 
 ```powershell
@@ -52,3 +75,16 @@ cargo clippy --all-targets -- -D warnings
 ```
 
 Test fixtures in `tests/fixtures/` are sanitized real sessions: `tools/probe.py --fixtures` (Claude) and `tools/fixtures_copilot.py` (Copilot) write them with text replaced by `<str:N>`, ids remapped and times shifted.
+
+```powershell
+pwsh tools/measure.ps1 -Idle
+```
+
+`tools/measure.ps1` stops a running widget, starts the release build and reports its private memory, CPU and exe size (`-App` opens the app window, `-Idle` starts it with an empty home folder).
+
+## Releasing
+
+CI (`.github/workflows/nuff-pulse.yml`) runs the tests, clippy and a release build on every change to the widget or its hook plugins. To release:
+
+1. Set `version` in `Cargo.toml` and rename `## Unreleased` in `CHANGELOG.md` to `## <version>`.
+2. Push a tag `apps/nuff-pulse/v<version>`. CI checks that the tag matches `Cargo.toml`, builds the exe and publishes a GitHub release with `nuff-pulse-<version>-windows-x64.zip` (exe, README, CHANGELOG, licence), its SHA-256 and the CHANGELOG section as notes.

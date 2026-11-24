@@ -63,6 +63,10 @@ Good enough guardrail hooks, one plugin per platform: [nuff-hooks-cc](./plugins/
 
 Works on Windows (with the `py` launcher), Linux and macOS (with `python3`); needs Python 3.10+.
 
+### nuff-pulse-cc / nuff-pulse-copilot
+
+Hooks that record each agent session's state (working, needs you, done, error, ended) to `~/.nuff-pulse/sessions/`, one plugin per platform: [nuff-pulse-cc](./plugins/nuff-pulse-cc/README.md) for Claude Code, [nuff-pulse-copilot](./plugins/nuff-pulse-copilot/README.md) for GitHub Copilot (CLI, app and VS Code's agent host). Their reader is [nuff-pulse](./apps/nuff-pulse/README.md), a small Windows widget that lists your active local sessions with state, context size and prompt-cache countdown; download it from the [releases](https://github.com/filip-be/nuff-plugin/releases) (tags `apps/nuff-pulse/v*`).
+
 ### nuff-cc
 
 Good enough mods for **Claude Code only**. First mod: open the current session's folder in VS Code from an **Open in VS Code** button above the prompt (desktop app) or `/vscode`.
