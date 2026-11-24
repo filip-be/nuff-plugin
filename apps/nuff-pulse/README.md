@@ -4,6 +4,18 @@ A small Windows widget that lists your active local agent sessions from Claude C
 
 Windows 10 or 11 (x64). Claude Code and Copilot CLI sessions inside WSL are listed too.
 
+The floating bar, collapsed to a pill and expanded to the session list:
+
+<img src="docs/screenshots/bar-pill.png" alt="The bar collapsed to a pill: 1 needs you, 1 error, 1 done, 2 working, cache 2m" width="367">
+
+<img src="docs/screenshots/bar-list.png" alt="The bar expanded: one row per session with state, activity, context, cache countdown, runtime and workspace" width="460">
+
+The app window, with every session of the day and the selected one's details:
+
+<img src="docs/screenshots/app-window.png" alt="The app window: session table on the left, detail pane on the right" width="1240">
+
+<sub>Screenshots in the dark theme, with made-up sessions. The app window is shown without its Windows title bar.</sub>
+
 ## Install
 
 1. Download `nuff-pulse-<version>-windows-x64.zip` from the [nuff-plugin releases](https://github.com/filip-be/nuff-plugin/releases) (tags `apps/nuff-pulse/v*`). Each zip has a `.sha256` file next to it.
@@ -24,7 +36,7 @@ To update, quit the widget from the tray menu and replace `nuff-pulse.exe`. To u
 - **Floating bar**: borderless, always on top, drag it anywhere (grab it by any part, rows included); its position is remembered per monitor layout. It hides while a full-screen app is in front. Two modes: a **pill** (counts and the most urgent cache countdown) and a **list** (one row per active session: state ring, title, state · activity, context, cache countdown, runtime and workspace). Click the pill to expand it; `–` in the list collapses it. Right-click a row and choose **Hide until active** to take a stale session off the bar: it comes back by itself with its next activity (a hidden session raises no alert; hiding is not kept across restarts). **Win+Alt+P** (configurable) toggles pill ↔ list.
 - **Click a row** to clear its alert and bring its window to the front: Windows Terminal, VS Code (the window whose title has the workspace folder), the GitHub Copilot app or the Claude app. Any other host is left alone rather than focusing a wrong window. WSL sessions are matched by window title.
 - **Tray icon**: a badge with the number of alerts, blinking while a session needs you. Left click shows or hides the bar; the menu has Show bar, Open app, Settings, Start with Windows and Quit.
-- **App window** (`☰` on the bar, or the tray): today's sessions with state, title, runtime, context, cache, model and cost, and a detail pane (workspace, branch, model, context meter, cache expiry, subagents, permission mode, last prompt, recent state changes, Focus window, Copy resume command, Hide from bar / Show on bar). Hidden sessions are marked “(hidden)”.
+- **App window** (`app` on the bar, or the tray): today's sessions with state, title, runtime, context, cache, model and cost, and a detail pane (workspace, branch, model, context meter, cache expiry, subagents, permission mode, last prompt, recent state changes, Focus window, Copy resume command, Hide from bar / Show on bar). Hidden sessions are marked “(hidden)”.
 - **Settings** (`%APPDATA%\nuff-pulse\settings.toml`, edited in the app window): hotkey, extra roots (folders read besides the defaults, optionally polled), context window per model-name prefix. Start with Windows adds or removes an `HKCU\…\Run` entry; it is off by default.
 - **WSL**: the `~/.claude`, `~/.copilot` and `~/.nuff-pulse` folders of each *running* distro are read through `\\wsl.localhost\<distro>\` and polled every 5 s; the list of running distros is refreshed every 30 s. Stopped distros are never started.
 

@@ -397,7 +397,7 @@ impl eframe::App for App {
             ViewportBuilder::default()
                 .with_title("nuff-pulse")
                 .with_app_id("nuff-pulse")
-                .with_inner_size([1000.0, 620.0])
+                .with_inner_size([1240.0, 680.0])
                 .with_min_inner_size([640.0, 360.0])
                 .with_visible(false),
             move |ui, _class| window::show(ui, &shared, &win),
