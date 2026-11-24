@@ -1,0 +1,114 @@
+{
+    "hooks": {
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "AskUserQuestion",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "AskUserQuestion",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "PermissionRequest": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "Notification": [
+            {
+                "matcher": "permission_prompt|elicitation_dialog",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "StopFailure": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "async": true,
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "SessionEnd": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if command -v py >/dev/null 2>&1; then py -3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; elif command -v python3 >/dev/null 2>&1; then python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/nuff_pulse_cc.py\"; fi >/dev/null 2>&1; exit 0",
+                        "timeout": 2
+                    }
+                ]
+            }
+        ]
+    }
+}
