@@ -100,20 +100,22 @@ pub fn windows() -> Vec<Win> {
         EnumWindows, GetWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, GW_OWNER,
     };
     unsafe extern "system" fn each(hwnd: HWND, lp: LPARAM) -> i32 {
-        let out = &mut *(lp as *mut Vec<Win>);
-        if IsWindowVisible(hwnd) == 0 || !GetWindow(hwnd, GW_OWNER).is_null() {
-            return 1;
+        unsafe {
+            let out = &mut *(lp as *mut Vec<Win>);
+            if IsWindowVisible(hwnd) == 0 || !GetWindow(hwnd, GW_OWNER).is_null() {
+                return 1;
+            }
+            let len = GetWindowTextLengthW(hwnd);
+            if len <= 0 {
+                return 1;
+            }
+            let mut buf = vec![0u16; len as usize + 1];
+            let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            out.push(Win { hwnd: hwnd as isize, pid, title: String::from_utf16_lossy(&buf[..n.max(0) as usize]) });
+            1
         }
-        let len = GetWindowTextLengthW(hwnd);
-        if len <= 0 {
-            return 1;
-        }
-        let mut buf = vec![0u16; len as usize + 1];
-        let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, &mut pid);
-        out.push(Win { hwnd: hwnd as isize, pid, title: String::from_utf16_lossy(&buf[..n.max(0) as usize]) });
-        1
     }
     let mut out: Vec<Win> = Vec::new();
     unsafe { EnumWindows(Some(each), &mut out as *mut Vec<Win> as LPARAM) };

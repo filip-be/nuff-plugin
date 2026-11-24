@@ -215,10 +215,8 @@ impl ClaudeLog {
                     let name = util::s(b, "name").unwrap_or("tool").to_string();
                     let summary = tool_summary(&name, b.get("input").unwrap_or(&Value::Null));
                     self.activity = Some(summary.clone());
-                    if let Some(id) = util::s(b, "id") {
-                        if !self.open.iter().any(|o| o.id == id) {
-                            self.open.push(OpenTool { id: id.to_string(), name, summary });
-                        }
+                    if let Some(id) = util::s(b, "id") && !self.open.iter().any(|o| o.id == id) {
+                        self.open.push(OpenTool { id: id.to_string(), name, summary });
                     }
                 }
             }

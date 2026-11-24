@@ -585,10 +585,8 @@ fn anchors(fref: &FileRef) -> &'static [&'static str] {
 
 pub fn claude_liveness(probe: &dyn Probe, hooks: &HookState, status: Option<&ClaudeStatus>) -> Liveness {
     let mut candidates: Vec<(u32, Option<f64>)> = Vec::new();
-    if let Some(h) = hooks.host.as_ref().filter(|h| h.os.as_deref() == Some("windows")) {
-        if let Some(pid) = h.agent_pid {
-            candidates.push((pid, h.agent_started));
-        }
+    if let Some(h) = hooks.host.as_ref().filter(|h| h.os.as_deref() == Some("windows")) && let Some(pid) = h.agent_pid {
+        candidates.push((pid, h.agent_started));
     }
     if let Some(st) = status {
         candidates.push((st.pid, st.proc_start));

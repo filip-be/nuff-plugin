@@ -204,30 +204,32 @@ pub fn signal_running_instance(open_app: bool) -> bool {
 }
 
 unsafe fn create_window() -> HWND {
-    let class = wide(CLASS);
-    let hinst = GetModuleHandleW(std::ptr::null());
-    let mut wc: WNDCLASSEXW = std::mem::zeroed();
-    wc.cbSize = std::mem::size_of::<WNDCLASSEXW>() as u32;
-    wc.lpfnWndProc = Some(wndproc);
-    wc.hInstance = hinst;
-    wc.lpszClassName = class.as_ptr();
-    RegisterClassExW(&wc);
-    // A hidden top-level window (not message-only: it must receive the
-    // TaskbarCreated broadcast and display changes).
-    CreateWindowExW(
-        0,
-        class.as_ptr(),
-        wide("nuff-pulse").as_ptr(),
-        0,
-        0,
-        0,
-        0,
-        0,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        hinst,
-        std::ptr::null(),
-    )
+    unsafe {
+        let class = wide(CLASS);
+        let hinst = GetModuleHandleW(std::ptr::null());
+        let mut wc: WNDCLASSEXW = std::mem::zeroed();
+        wc.cbSize = std::mem::size_of::<WNDCLASSEXW>() as u32;
+        wc.lpfnWndProc = Some(wndproc);
+        wc.hInstance = hinst;
+        wc.lpszClassName = class.as_ptr();
+        RegisterClassExW(&wc);
+        // A hidden top-level window (not message-only: it must receive the
+        // TaskbarCreated broadcast and display changes).
+        CreateWindowExW(
+            0,
+            class.as_ptr(),
+            wide("nuff-pulse").as_ptr(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            hinst,
+            std::ptr::null(),
+        )
+    }
 }
 
 fn emit(ev: ShellEvent) {
@@ -239,108 +241,112 @@ fn emit(ev: ShellEvent) {
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
-    let taskbar_created = CTX.with(|c| c.borrow().as_ref().map_or(u32::MAX, |x| x.taskbar_created));
-    match msg {
-        WM_TRAY => {
-            match lp as u32 {
-                WM_LBUTTONUP => emit(ShellEvent::ToggleBar),
-                WM_RBUTTONUP => show_menu(hwnd),
-                _ => {}
-            }
-            0
-        }
-        WM_UPDATE => {
-            refresh_tray(hwnd);
-            0
-        }
-        WM_REHOTKEY => {
-            register_hotkey(hwnd);
-            emit(ShellEvent::HotkeyRegistered);
-            0
-        }
-        WM_SHOW_INSTANCE => {
-            emit(if wp == 1 { ShellEvent::OpenApp } else { ShellEvent::ShowBar });
-            0
-        }
-        WM_HOTKEY => {
-            if wp as i32 == HOTKEY_ID {
-                emit(ShellEvent::ToggleMode);
-            }
-            0
-        }
-        WM_TIMER => {
-            match wp {
-                TIMER_BLINK => {
-                    CTX.with(|c| {
-                        if let Some(ctx) = c.borrow_mut().as_mut() {
-                            ctx.blink_on = !ctx.blink_on;
-                        }
-                    });
-                    refresh_tray(hwnd);
+    unsafe {
+        let taskbar_created = CTX.with(|c| c.borrow().as_ref().map_or(u32::MAX, |x| x.taskbar_created));
+        match msg {
+            WM_TRAY => {
+                match lp as u32 {
+                    WM_LBUTTONUP => emit(ShellEvent::ToggleBar),
+                    WM_RBUTTONUP => show_menu(hwnd),
+                    _ => {}
                 }
-                TIMER_FULLSCREEN => {
-                    let now = fullscreen_in_front();
-                    let changed = CTX.with(|c| {
-                        c.borrow_mut().as_mut().is_some_and(|ctx| std::mem::replace(&mut ctx.fullscreen, now) != now)
-                    });
-                    if changed {
-                        emit(ShellEvent::Fullscreen(now));
+                0
+            }
+            WM_UPDATE => {
+                refresh_tray(hwnd);
+                0
+            }
+            WM_REHOTKEY => {
+                register_hotkey(hwnd);
+                emit(ShellEvent::HotkeyRegistered);
+                0
+            }
+            WM_SHOW_INSTANCE => {
+                emit(if wp == 1 { ShellEvent::OpenApp } else { ShellEvent::ShowBar });
+                0
+            }
+            WM_HOTKEY => {
+                if wp as i32 == HOTKEY_ID {
+                    emit(ShellEvent::ToggleMode);
+                }
+                0
+            }
+            WM_TIMER => {
+                match wp {
+                    TIMER_BLINK => {
+                        CTX.with(|c| {
+                            if let Some(ctx) = c.borrow_mut().as_mut() {
+                                ctx.blink_on = !ctx.blink_on;
+                            }
+                        });
+                        refresh_tray(hwnd);
                     }
+                    TIMER_FULLSCREEN => {
+                        let now = fullscreen_in_front();
+                        let changed = CTX.with(|c| {
+                            c.borrow_mut().as_mut().is_some_and(|ctx| std::mem::replace(&mut ctx.fullscreen, now) != now)
+                        });
+                        if changed {
+                            emit(ShellEvent::Fullscreen(now));
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
+                0
             }
-            0
+            WM_DISPLAYCHANGE => {
+                emit(ShellEvent::LayoutChanged);
+                DefWindowProcW(hwnd, msg, wp, lp)
+            }
+            WM_CLOSE => {
+                remove_tray(hwnd);
+                UnregisterHotKey(hwnd, HOTKEY_ID);
+                DestroyWindow(hwnd);
+                0
+            }
+            WM_DESTROY => {
+                PostQuitMessage(0);
+                0
+            }
+            m if m == taskbar_created => {
+                // Explorer restarted: the icon is gone, add it again.
+                CTX.with(|c| {
+                    if let Some(ctx) = c.borrow_mut().as_mut() {
+                        ctx.tray_added = false;
+                        ctx.shown = None;
+                    }
+                });
+                refresh_tray(hwnd);
+                0
+            }
+            _ => DefWindowProcW(hwnd, msg, wp, lp),
         }
-        WM_DISPLAYCHANGE => {
-            emit(ShellEvent::LayoutChanged);
-            DefWindowProcW(hwnd, msg, wp, lp)
-        }
-        WM_CLOSE => {
-            remove_tray(hwnd);
-            UnregisterHotKey(hwnd, HOTKEY_ID);
-            DestroyWindow(hwnd);
-            0
-        }
-        WM_DESTROY => {
-            PostQuitMessage(0);
-            0
-        }
-        m if m == taskbar_created => {
-            // Explorer restarted: the icon is gone, add it again.
-            CTX.with(|c| {
-                if let Some(ctx) = c.borrow_mut().as_mut() {
-                    ctx.tray_added = false;
-                    ctx.shown = None;
-                }
-            });
-            refresh_tray(hwnd);
-            0
-        }
-        _ => DefWindowProcW(hwnd, msg, wp, lp),
     }
 }
 
 unsafe fn register_hotkey(hwnd: HWND) {
-    let Some(inner) = CTX.with(|c| c.borrow().as_ref().map(|x| x.inner.clone())) else { return };
-    let (wanted, previous) = {
-        let i = inner.lock().unwrap();
-        (i.hotkey, i.registered)
-    };
-    UnregisterHotKey(hwnd, HOTKEY_ID);
-    let register = |(mods, vk): (u32, u32)| RegisterHotKey(hwnd, HOTKEY_ID, mods | MOD_NOREPEAT, vk) != 0;
-    let ok = wanted.map(register);
-    let registered = match ok {
-        Some(true) => wanted,
-        // Taken by another app: keep the one that worked.
-        _ => previous.filter(|p| wanted.is_some() && register(*p)),
-    };
-    let mut i = inner.lock().unwrap();
-    // A newer request arrived meanwhile: its own message reports.
-    if i.hotkey == wanted {
-        i.hotkey_ok = ok;
-        i.tried = wanted;
+    unsafe {
+        let Some(inner) = CTX.with(|c| c.borrow().as_ref().map(|x| x.inner.clone())) else { return };
+        let (wanted, previous) = {
+            let i = inner.lock().unwrap();
+            (i.hotkey, i.registered)
+        };
+        UnregisterHotKey(hwnd, HOTKEY_ID);
+        let register = |(mods, vk): (u32, u32)| RegisterHotKey(hwnd, HOTKEY_ID, mods | MOD_NOREPEAT, vk) != 0;
+        let ok = wanted.map(register);
+        let registered = match ok {
+            Some(true) => wanted,
+            // Taken by another app: keep the one that worked.
+            _ => previous.filter(|p| wanted.is_some() && register(*p)),
+        };
+        let mut i = inner.lock().unwrap();
+        // A newer request arrived meanwhile: its own message reports.
+        if i.hotkey == wanted {
+            i.hotkey_ok = ok;
+            i.tried = wanted;
+        }
+        i.registered = registered;
     }
-    i.registered = registered;
 }
 
 fn copy_tip(dst: &mut [u16; 128], s: &str) {
@@ -359,123 +365,131 @@ fn nid(hwnd: HWND) -> NOTIFYICONDATAW {
 
 /// Adds or updates the tray icon from the shared state.
 unsafe fn refresh_tray(hwnd: HWND) {
-    CTX.with(|c| {
-        let mut b = c.borrow_mut();
-        let Some(ctx) = b.as_mut() else { return };
-        let tray = ctx.inner.lock().unwrap().tray.clone();
-        // Blink timer runs only while a session needs you.
-        if tray.blink != ctx.blinking {
-            ctx.blinking = tray.blink;
-            ctx.blink_on = true;
-            if tray.blink {
-                SetTimer(hwnd, TIMER_BLINK, BLINK_MS, None);
-            } else {
-                KillTimer(hwnd, TIMER_BLINK);
+    unsafe {
+        CTX.with(|c| {
+            let mut b = c.borrow_mut();
+            let Some(ctx) = b.as_mut() else { return };
+            let tray = ctx.inner.lock().unwrap().tray.clone();
+            // Blink timer runs only while a session needs you.
+            if tray.blink != ctx.blinking {
+                ctx.blinking = tray.blink;
+                ctx.blink_on = true;
+                if tray.blink {
+                    SetTimer(hwnd, TIMER_BLINK, BLINK_MS, None);
+                } else {
+                    KillTimer(hwnd, TIMER_BLINK);
+                }
             }
-        }
-        let badge_on = !ctx.blinking || ctx.blink_on;
-        let want = (tray.alerts, badge_on);
-        let mut n = nid(hwnd);
-        n.uFlags = NIF_MESSAGE | NIF_TIP;
-        n.uCallbackMessage = WM_TRAY;
-        copy_tip(&mut n.szTip, &tray.tooltip);
-        if ctx.shown != Some(want) || !ctx.tray_added {
-            let size = GetSystemMetrics(SM_CXSMICON).clamp(16, 64) as u32;
-            let icon = make_icon(size, &crate::icon::render(size, tray.alerts, badge_on));
-            if !icon.is_null() {
-                n.uFlags |= NIF_ICON;
-                n.hIcon = icon;
+            let badge_on = !ctx.blinking || ctx.blink_on;
+            let want = (tray.alerts, badge_on);
+            let mut n = nid(hwnd);
+            n.uFlags = NIF_MESSAGE | NIF_TIP;
+            n.uCallbackMessage = WM_TRAY;
+            copy_tip(&mut n.szTip, &tray.tooltip);
+            if ctx.shown != Some(want) || !ctx.tray_added {
+                let size = GetSystemMetrics(SM_CXSMICON).clamp(16, 64) as u32;
+                let icon = make_icon(size, &crate::icon::render(size, tray.alerts, badge_on));
+                if !icon.is_null() {
+                    n.uFlags |= NIF_ICON;
+                    n.hIcon = icon;
+                }
+                let ok = if ctx.tray_added { Shell_NotifyIconW(NIM_MODIFY, &n) } else { Shell_NotifyIconW(NIM_ADD, &n) } != 0;
+                if !ctx.icon.is_null() {
+                    DestroyIcon(ctx.icon);
+                }
+                ctx.icon = icon;
+                ctx.tray_added |= ok;
+                ctx.shown = ok.then_some(want);
+                ctx.tip = tray.tooltip;
+            } else if ctx.tip != tray.tooltip {
+                Shell_NotifyIconW(NIM_MODIFY, &n);
+                ctx.tip = tray.tooltip;
             }
-            let ok = if ctx.tray_added { Shell_NotifyIconW(NIM_MODIFY, &n) } else { Shell_NotifyIconW(NIM_ADD, &n) } != 0;
-            if !ctx.icon.is_null() {
-                DestroyIcon(ctx.icon);
-            }
-            ctx.icon = icon;
-            ctx.tray_added |= ok;
-            ctx.shown = ok.then_some(want);
-            ctx.tip = tray.tooltip;
-        } else if ctx.tip != tray.tooltip {
-            Shell_NotifyIconW(NIM_MODIFY, &n);
-            ctx.tip = tray.tooltip;
-        }
-    });
+        });
+    }
 }
 
 unsafe fn remove_tray(hwnd: HWND) {
-    let n = nid(hwnd);
-    Shell_NotifyIconW(NIM_DELETE, &n);
-    CTX.with(|c| {
-        if let Some(ctx) = c.borrow_mut().as_mut() {
-            if !ctx.icon.is_null() {
-                DestroyIcon(ctx.icon);
-                ctx.icon = std::ptr::null_mut();
+    unsafe {
+        let n = nid(hwnd);
+        Shell_NotifyIconW(NIM_DELETE, &n);
+        CTX.with(|c| {
+            if let Some(ctx) = c.borrow_mut().as_mut() {
+                if !ctx.icon.is_null() {
+                    DestroyIcon(ctx.icon);
+                    ctx.icon = std::ptr::null_mut();
+                }
+                ctx.tray_added = false;
             }
-            ctx.tray_added = false;
-        }
-    });
+        });
+    }
 }
 
 /// An HICON from straight-alpha RGBA pixels (`size`×`size`×4 bytes).
 unsafe fn make_icon(size: u32, rgba: &[u8]) -> HICON {
-    let mut bi: BITMAPINFO = std::mem::zeroed();
-    bi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
-    bi.bmiHeader.biWidth = size as i32;
-    bi.bmiHeader.biHeight = -(size as i32); // top-down
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
-    let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-    let color = CreateDIBSection(std::ptr::null_mut(), &bi, DIB_RGB_COLORS, &mut bits, std::ptr::null_mut(), 0);
-    if color.is_null() || bits.is_null() {
-        return std::ptr::null_mut();
+    unsafe {
+        let mut bi: BITMAPINFO = std::mem::zeroed();
+        bi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bi.bmiHeader.biWidth = size as i32;
+        bi.bmiHeader.biHeight = -(size as i32); // top-down
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let color = CreateDIBSection(std::ptr::null_mut(), &bi, DIB_RGB_COLORS, &mut bits, std::ptr::null_mut(), 0);
+        if color.is_null() || bits.is_null() {
+            return std::ptr::null_mut();
+        }
+        let dst = std::slice::from_raw_parts_mut(bits as *mut u8, (size * size * 4) as usize);
+        for (d, s) in dst.as_chunks_mut::<4>().0.iter_mut().zip(rgba.as_chunks::<4>().0) {
+            *d = [s[2], s[1], s[0], s[3]];
+        }
+        let mask_bytes = vec![0u8; (size.div_ceil(16) * 2 * size) as usize];
+        let mask = CreateBitmap(size as i32, size as i32, 1, 1, mask_bytes.as_ptr() as *const _);
+        let info = ICONINFO { fIcon: 1, xHotspot: 0, yHotspot: 0, hbmMask: mask, hbmColor: color };
+        let icon = CreateIconIndirect(&info);
+        DeleteObject(color);
+        DeleteObject(mask);
+        icon
     }
-    let dst = std::slice::from_raw_parts_mut(bits as *mut u8, (size * size * 4) as usize);
-    for (d, s) in dst.as_chunks_mut::<4>().0.iter_mut().zip(rgba.as_chunks::<4>().0) {
-        *d = [s[2], s[1], s[0], s[3]];
-    }
-    let mask_bytes = vec![0u8; (size.div_ceil(16) * 2 * size) as usize];
-    let mask = CreateBitmap(size as i32, size as i32, 1, 1, mask_bytes.as_ptr() as *const _);
-    let info = ICONINFO { fIcon: 1, xHotspot: 0, yHotspot: 0, hbmMask: mask, hbmColor: color };
-    let icon = CreateIconIndirect(&info);
-    DeleteObject(color);
-    DeleteObject(mask);
-    icon
 }
 
 unsafe fn show_menu(hwnd: HWND) {
-    let bar_visible = CTX.with(|c| c.borrow().as_ref().is_some_and(|x| x.inner.lock().unwrap().tray.bar_visible));
-    let autostart = desktop::autostart_enabled();
-    let menu = CreatePopupMenu();
-    if menu.is_null() {
-        return;
-    }
-    let item = |id: usize, text: &str, checked: bool| {
-        let flags = MF_STRING | if checked { MF_CHECKED } else { 0 };
-        AppendMenuW(menu, flags, id, wide(text).as_ptr());
-    };
-    item(CMD_SHOW_BAR, "Show bar", bar_visible);
-    item(CMD_OPEN_APP, "Open app", false);
-    item(CMD_SETTINGS, "Settings", false);
-    AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-    item(CMD_AUTOSTART, "Start with Windows", autostart);
-    AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-    item(CMD_QUIT, "Quit", false);
-    let mut pt = POINT { x: 0, y: 0 };
-    GetCursorPos(&mut pt);
-    // Without this the menu does not close when clicking elsewhere.
-    SetForegroundWindow(hwnd);
-    let cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, hwnd, std::ptr::null());
-    PostMessageW(hwnd, WM_NULL, 0, 0);
-    DestroyMenu(menu);
-    match cmd as usize {
-        CMD_SHOW_BAR => emit(ShellEvent::ToggleBar),
-        CMD_OPEN_APP => emit(ShellEvent::OpenApp),
-        CMD_SETTINGS => emit(ShellEvent::OpenSettings),
-        CMD_AUTOSTART => {
-            desktop::set_autostart(!autostart);
+    unsafe {
+        let bar_visible = CTX.with(|c| c.borrow().as_ref().is_some_and(|x| x.inner.lock().unwrap().tray.bar_visible));
+        let autostart = desktop::autostart_enabled();
+        let menu = CreatePopupMenu();
+        if menu.is_null() {
+            return;
         }
-        CMD_QUIT => emit(ShellEvent::Quit),
-        _ => {}
+        let item = |id: usize, text: &str, checked: bool| {
+            let flags = MF_STRING | if checked { MF_CHECKED } else { 0 };
+            AppendMenuW(menu, flags, id, wide(text).as_ptr());
+        };
+        item(CMD_SHOW_BAR, "Show bar", bar_visible);
+        item(CMD_OPEN_APP, "Open app", false);
+        item(CMD_SETTINGS, "Settings", false);
+        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        item(CMD_AUTOSTART, "Start with Windows", autostart);
+        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        item(CMD_QUIT, "Quit", false);
+        let mut pt = POINT { x: 0, y: 0 };
+        GetCursorPos(&mut pt);
+        // Without this the menu does not close when clicking elsewhere.
+        SetForegroundWindow(hwnd);
+        let cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, hwnd, std::ptr::null());
+        PostMessageW(hwnd, WM_NULL, 0, 0);
+        DestroyMenu(menu);
+        match cmd as usize {
+            CMD_SHOW_BAR => emit(ShellEvent::ToggleBar),
+            CMD_OPEN_APP => emit(ShellEvent::OpenApp),
+            CMD_SETTINGS => emit(ShellEvent::OpenSettings),
+            CMD_AUTOSTART => {
+                desktop::set_autostart(!autostart);
+            }
+            CMD_QUIT => emit(ShellEvent::Quit),
+            _ => {}
+        }
     }
 }
 

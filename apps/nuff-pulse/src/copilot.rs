@@ -118,10 +118,8 @@ impl CopilotLog {
             (Some(_), None) => true,
             _ => false,
         };
-        if checkpoint_newer {
-            if let Some(exp) = entry.and_then(|e| e.expires) {
-                return Some(exp);
-            }
+        if checkpoint_newer && let Some(exp) = entry.and_then(|e| e.expires) {
+            return Some(exp);
         }
         // The last request only tells about its own model's cache; after a
         // model switch the new model has no cache yet.
@@ -190,14 +188,12 @@ impl CopilotLog {
                 self.set(t, State::NeedsYou, Some("question"), false);
             }
         }
-        if kind == "tool.execution_complete" {
-            if let Some(id) = util::s(data, "toolCallId") {
-                if self.open_asks.remove(id) {
-                    if let Some(t) = t {
-                        self.unblock(t);
-                    }
-                }
-            }
+        if kind == "tool.execution_complete"
+            && let Some(id) = util::s(data, "toolCallId")
+            && self.open_asks.remove(id)
+            && let Some(t) = t
+        {
+            self.unblock(t);
         }
         if sub {
             return;
@@ -361,11 +357,9 @@ impl CopilotLog {
             }
             "session.shutdown" => {
                 self.read_cost(data);
-                if self.context_tokens.is_none() {
-                    if let Some(c) = util::u(data, "currentTokens") {
-                        self.context_tokens = Some(c);
-                        self.context_approx = true;
-                    }
+                if self.context_tokens.is_none() && let Some(c) = util::u(data, "currentTokens") {
+                    self.context_tokens = Some(c);
+                    self.context_approx = true;
                 }
                 if let Some(m) = util::s(data, "currentModel") {
                     self.model = Some(m.to_string());

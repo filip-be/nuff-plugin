@@ -136,16 +136,14 @@ impl HookState {
         if line.state.is_none() {
             merge(&mut self.start_reason, st, &line.reason, t);
         }
-        if let Some(state) = line.state {
-            if self.sig.as_ref().is_none_or(|s| line.t >= s.t) {
-                self.sig = Some(Sig {
-                    t: line.t,
-                    state,
-                    reason: line.reason.clone(),
-                    detail: line.detail.clone(),
-                    provisional: false,
-                });
-            }
+        if let Some(state) = line.state && self.sig.as_ref().is_none_or(|s| line.t >= s.t) {
+            self.sig = Some(Sig {
+                t: line.t,
+                state,
+                reason: line.reason.clone(),
+                detail: line.detail.clone(),
+                provisional: false,
+            });
         }
     }
 }

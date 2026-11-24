@@ -22,14 +22,16 @@ pub fn wide(s: &str) -> Vec<u16> {
 /// Monitor rectangles (left, top, right, bottom), physical pixels.
 pub fn monitors() -> Vec<[i32; 4]> {
     unsafe extern "system" fn each(m: HMONITOR, _: HDC, _: *mut RECT, lp: LPARAM) -> i32 {
-        let out = &mut *(lp as *mut Vec<[i32; 4]>);
-        let mut mi: MONITORINFO = std::mem::zeroed();
-        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-        if GetMonitorInfoW(m, &mut mi) != 0 {
-            let r = mi.rcMonitor;
-            out.push([r.left, r.top, r.right, r.bottom]);
+        unsafe {
+            let out = &mut *(lp as *mut Vec<[i32; 4]>);
+            let mut mi: MONITORINFO = std::mem::zeroed();
+            mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+            if GetMonitorInfoW(m, &mut mi) != 0 {
+                let r = mi.rcMonitor;
+                out.push([r.left, r.top, r.right, r.bottom]);
+            }
+            1
         }
-        1
     }
     let mut out: Vec<[i32; 4]> = Vec::new();
     unsafe { EnumDisplayMonitors(std::ptr::null_mut(), std::ptr::null(), Some(each), &mut out as *mut _ as LPARAM) };
