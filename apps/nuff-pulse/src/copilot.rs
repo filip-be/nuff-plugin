@@ -119,7 +119,7 @@ impl CopilotLog {
         }
         // The last request only tells about its own model's cache; after a
         // model switch the new model has no cache yet.
-        if self.last_request_model.is_some() && self.last_request_model.as_deref() != model {
+        if self.last_request_t.is_some() && self.last_request_model.as_deref() != model {
             return None;
         }
         if let Some(exp) = self.request_cache_expires {
@@ -669,6 +669,12 @@ mod tests {
         assert!(log.cache_expires().is_some());
         log.apply(&ev("session.model_change", "40", r#"{"newModel":"claude-b"}"#));
         assert_eq!(log.cache_expires(), None);
+        // A request of unknown model says nothing about a model selected later.
+        let mut anon = CopilotLog::new();
+        anon.apply(&ev("session.usage_record", "30", r#"{"usage":{"inputTokens":5,"cacheExpiresAt":"2025-11-24T16:30:30Z"}}"#));
+        assert!(anon.cache_expires().is_some());
+        anon.apply(&ev("session.model_change", "40", r#"{"newModel":"claude-b"}"#));
+        assert_eq!(anon.cache_expires(), None);
     }
 
     #[test]
