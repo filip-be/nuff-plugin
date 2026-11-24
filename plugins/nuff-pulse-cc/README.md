@@ -56,7 +56,7 @@ The plugin only writes the file. The reader is the **nuff-pulse** widget, a smal
 | Field | Meaning |
 | ----- | ------- |
 | `v` | Format version, `1` |
-| `t` | When the hook ran, Unix seconds |
+| `t` | When the hook started, Unix seconds |
 | `runtime` | Always `claude` |
 | `session_id` | The Session; letters, digits, `-` and `_` only |
 | `event` | The hook event name |
@@ -75,11 +75,11 @@ Readers should treat every field except `v`, `t`, `runtime` and `session_id` as 
 
 - `cwd`, `log_path` and the `host` facts are repeated on every line, so the newest line alone is enough.
 - A line is at most 4,000 bytes (UTF-8): when it would be longer, `detail`, then `log_path`, then `cwd`, then `host` are left out.
-- A line is written with a single append under a short file lock (`msvcrt.locking` on Windows, `flock` elsewhere), so concurrent hooks never mix their lines.
+- A line is written with a single append under a short file lock (`msvcrt.locking` on Windows, `flock` elsewhere), so concurrent hooks never mix their lines. When the lock is not free within 0.5 s, that line is dropped.
 - The plugin never deletes Pulse Files; nuff-pulse removes files of sessions that ended more than 24 hours ago.
 - Process facts come from Toolhelp32 on Windows and `/proc` on Linux; never WMI.
 
 ## Prerequisites
 
-- Python 3.10+: on Windows the `py` launcher (`py -3 --version`), on Linux and macOS `python3` on `PATH`. Without Python the hooks do nothing.
-- On Windows, Git Bash. Claude Code runs this plugin's hook command in Git Bash; without it the command does not parse in PowerShell and no Pulse Lines are written.
+- Python 3.10+: on Windows the `py` launcher (`py -3 --version`), on Linux and macOS `python3` on `PATH`. The hook tries `py`, then `python3`; without either it does nothing.
+- On Windows, Git Bash or PowerShell 7 (`pwsh`): Claude Code runs hook commands in Git Bash when it is installed, else in PowerShell. The command does not run in Windows PowerShell 5.1.

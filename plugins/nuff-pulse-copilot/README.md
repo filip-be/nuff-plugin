@@ -49,7 +49,7 @@ The plugin only writes the file. The reader is the **nuff-pulse** widget, a smal
 | Field | Meaning |
 | ----- | ------- |
 | `v` | Format version, `1` |
-| `t` | The hook's `timestamp` (Unix seconds); when the hook input has none, when the hook ran |
+| `t` | The hook's `timestamp` (Unix seconds); when the hook input has none, when the hook started |
 | `runtime` | Always `copilot` |
 | `session_id` | The Session; letters, digits, `-` and `_` only |
 | `event` | `agentStop` or `sessionEnd` |
@@ -66,7 +66,7 @@ The plugin only writes the file. The reader is the **nuff-pulse** widget, a smal
 Readers should treat every field except `v`, `t`, `runtime` and `session_id` as optional, ignore unknown fields (a `detail` text may appear in later versions) and skip lines that are not valid JSON.
 
 - A line is at most 4,000 bytes (UTF-8): when it would be longer, `log_path`, then `cwd`, then `host` are left out.
-- A line is written with a single append under a short file lock (`msvcrt.locking` on Windows, `flock` elsewhere), so concurrent hooks never mix their lines.
+- A line is written with a single append under a short file lock (`msvcrt.locking` on Windows, `flock` elsewhere), so concurrent hooks never mix their lines. When the lock is not free within 0.5 s, that line is dropped.
 - The plugin never deletes Pulse Files; nuff-pulse removes files of sessions that ended more than 24 hours ago.
 - Process facts come from Toolhelp32 on Windows and `/proc` on Linux; never WMI.
 

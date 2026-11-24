@@ -5,6 +5,7 @@ Fails open: never prints, never blocks, always exits 0.
 """
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -23,13 +24,14 @@ def classify(event, payload):
     return None
 
 
-def event_time(payload):
-    """The hook's `timestamp` (int ms) in seconds, else now."""
+def event_time(payload, started):
+    """The hook's `timestamp` (int ms) in seconds, else when the hook started."""
     stamp = payload.get("timestamp")
-    return stamp / 1000 if type(stamp) is int and stamp > 0 else None
+    return stamp / 1000 if type(stamp) is int and stamp > 0 else started
 
 
 def main(argv):
+    started = time.time()
     event = argv[1] if len(argv) == 2 else None
     payload = core.read_stdin()
     result = classify(event, payload)
@@ -39,7 +41,7 @@ def main(argv):
     line = core.build_line(
         RUNTIME, payload.get("sessionId"), event, state, reason,
         cwd=payload.get("cwd"), log_path=payload.get("transcriptPath"),
-        t=event_time(payload), host=core.host_info(),
+        t=event_time(payload, started), host=core.host_info(),
     )
     if line:
         core.append(line)

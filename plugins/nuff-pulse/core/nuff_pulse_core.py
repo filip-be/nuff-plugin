@@ -22,7 +22,7 @@ SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 STATES = {"working", "needs_you", "done", "error", "ended"}
 MAX_PIDS = 16
-LOCK_WAIT = 0.5  # seconds; after that the line is written without the lock
+LOCK_WAIT = 0.5  # seconds; after that the line is dropped (unlocked appends can overwrite)
 # Launchers between the agent and this script: never the agent itself.
 LAUNCHERS = {
     "py", "python", "python3", "pythonw", "bash", "sh", "dash", "zsh", "env",
@@ -248,7 +248,8 @@ def _unlock(fd):
 
 
 def append(line, folder=None):
-    """Append one encoded line to the session's file. Returns the path or None."""
+    """Append one encoded line to the session's file. Returns the path, or None
+    when nothing was written (line unusable, or the lock not taken in time)."""
     data = encode(line)
     if data is None:
         return None
@@ -258,14 +259,14 @@ def append(line, folder=None):
     flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
     fd = os.open(path, flags, 0o600)
     try:
-        locked = _lock(fd)
+        if not _lock(fd):
+            return None
         try:
             view = memoryview(data)
             while view:
                 view = view[os.write(fd, view):]
         finally:
-            if locked:
-                _unlock(fd)
+            _unlock(fd)
     finally:
         os.close(fd)
     return path

@@ -88,12 +88,12 @@ class Append(unittest.TestCase):
         self.assertEqual(len(lines), 200)
         self.assertEqual(len({json.loads(l)["detail"] for l in lines}), 200)
 
-    def test_writes_without_lock_after_timeout(self):
+    def test_drops_the_line_when_the_lock_times_out(self):
         with mock.patch.object(core, "_lock", return_value=False), \
                 mock.patch.object(core, "_unlock") as unlock:
-            path = core.append(core.build_line("claude", "s4", "Stop", "done"), self.folder)
+            self.assertIsNone(core.append(core.build_line("claude", "s4", "Stop", "done"), self.folder))
         unlock.assert_not_called()
-        self.assertEqual(len(path.read_text().splitlines()), 1)
+        self.assertEqual((self.folder / "claude-s4.hooks.jsonl").read_bytes(), b"")
 
 
 class Host(unittest.TestCase):

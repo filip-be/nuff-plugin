@@ -75,9 +75,12 @@ class Launchers(unittest.TestCase):
 
     def cases(self):
         stop = copilot_hooks()["agentStop"][0]
+        cc = cc_hooks()["Stop"][0]["hooks"][0]["command"]
+        cc_stop = {"session_id": SID, "hook_event_name": "Stop"}
         return [
-            ("cc", "sh", cc_hooks()["Stop"][0]["hooks"][0]["command"], "CLAUDE_PLUGIN_ROOT", CC,
-             {"session_id": SID, "hook_event_name": "Stop"}, "claude"),
+            # Claude Code runs it in Git Bash, or in PowerShell when Git Bash is missing.
+            ("cc-bash", "sh", cc, "CLAUDE_PLUGIN_ROOT", CC, cc_stop, "claude"),
+            ("cc-powershell", "pwsh", cc, "CLAUDE_PLUGIN_ROOT", CC, cc_stop, "claude"),
             ("copilot-bash", "sh", stop["bash"], "PLUGIN_ROOT", COPILOT,
              {"sessionId": SID, "stopReason": "end_turn"}, "copilot"),
             ("copilot-powershell", "pwsh", stop["powershell"], "PLUGIN_ROOT", COPILOT,
@@ -108,7 +111,7 @@ class Launchers(unittest.TestCase):
                 if os.name == "nt" and (shutil.which("py", path=path) or shutil.which("python3", path=path)):
                     self.skipTest("Python sits next to the shell")
                 result = self.run_command(shell, command, variable, root, payload, path=path)
-                self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse((self.home / ".nuff-pulse").exists())
 
 

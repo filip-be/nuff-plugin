@@ -4,6 +4,7 @@ Fails open: never prints, never blocks, always exits 0.
 """
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -61,6 +62,7 @@ def classify(event, payload):
 
 
 def main():
+    started = time.time()  # before the ancestry walk, so lines keep the hooks' order
     payload = core.read_stdin()
     event = payload.get("hook_event_name")
     result = classify(event, payload)
@@ -70,7 +72,7 @@ def main():
     line = core.build_line(
         RUNTIME, payload.get("session_id"), event, state, reason, detail,
         cwd=payload.get("cwd"), log_path=payload.get("transcript_path"),
-        host=core.host_info(),
+        t=started, host=core.host_info(),
     )
     if line:
         core.append(line)
