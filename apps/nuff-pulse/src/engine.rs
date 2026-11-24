@@ -247,6 +247,18 @@ impl Engine {
         self.generation += 1;
     }
 
+    /// Hides a session from the bar until its next activity.
+    pub fn hide(&mut self, key: &SessionKey, now: f64) {
+        self.model.hide(key, now);
+        self.generation += 1;
+    }
+
+    /// Shows a hidden session on the bar again.
+    pub fn unhide(&mut self, key: &SessionKey) {
+        self.model.unhide(key);
+        self.generation += 1;
+    }
+
     fn keep_since(now: f64) -> f64 {
         util::start_of_today(now).min(now - ACTIVE_WINDOW)
     }

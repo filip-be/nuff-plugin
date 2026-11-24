@@ -92,6 +92,9 @@ pub struct Session {
     /// Creation time of `lock_pid`.
     pub lock_started: Option<f64>,
     pub acked_t: f64,
+    /// When the user hid the session from the bar; it comes back with its
+    /// next activity.
+    pub hidden_t: Option<f64>,
     pub history: VecDeque<(f64, State)>,
     /// Modification time of the session's log when last read.
     pub log_mtime: Option<f64>,
@@ -316,8 +319,12 @@ pub struct Row {
     pub cost: Cost,
     pub last_prompt: Option<String>,
     pub permission_mode: Option<String>,
-    /// Shown in the bar: not ended and active within the last 2 h.
+    /// Shown in the bar: not ended, active within the last 2 h and not
+    /// hidden.
     pub active: bool,
+    /// Would be on the bar, but the user hid it and it has had no activity
+    /// since.
+    pub hidden: bool,
     pub last_activity: f64,
     pub history: Vec<(f64, State)>,
     pub resume_command: String,
@@ -346,6 +353,22 @@ impl Model {
         }
     }
 
+    /// Hides a session from the bar until its next activity (and clears
+    /// its alert).
+    pub fn hide(&mut self, key: &SessionKey, now: f64) {
+        if let Some(s) = self.sessions.get_mut(key) {
+            s.hidden_t = Some(now);
+            s.acked_t = now;
+        }
+    }
+
+    /// Shows a hidden session on the bar again.
+    pub fn unhide(&mut self, key: &SessionKey) {
+        if let Some(s) = self.sessions.get_mut(key) {
+            s.hidden_t = None;
+        }
+    }
+
     /// Drops sessions with no activity since `keep_since` that are not active.
     pub fn prune(&mut self, now: f64, keep_since: f64) {
         self.sessions.retain(|_, s| {
@@ -364,7 +387,7 @@ impl Model {
             // hook line yet) is not activity.
             .filter(|(_, s)| s.claude.is_some() || s.copilot.is_some() || s.hooks.last_t.is_some())
             .map(|(k, s)| self.row(k, s, now))
-            .filter(|r| r.active || r.last_activity >= today)
+            .filter(|r| r.active || r.hidden || r.last_activity >= today)
             .collect();
         rows.sort_by(|a, b| {
             a.state
@@ -394,11 +417,14 @@ impl Model {
             }
         };
         let last_activity = s.last_activity();
-        let active = raw != State::Ended && now - last_activity < ACTIVE_WINDOW;
+        let live = raw != State::Ended && now - last_activity < ACTIVE_WINDOW;
+        // Hidden by the user, with nothing new since.
+        let hidden = live && s.hidden_t.is_some_and(|h| last_activity <= h);
+        let active = live && !hidden;
         // Sessions that left the bar raise no alert, and after 2 h without
         // activity a session counts as ended whatever it said last.
         let alert = alert && active;
-        let state = if active { state } else { Display::Ended };
+        let state = if live { state } else { Display::Ended };
         let wsl = matches!(key.origin, Origin::Wsl(_));
 
         let mut r = Row {
@@ -429,6 +455,7 @@ impl Model {
             last_prompt: None,
             permission_mode: None,
             active,
+            hidden,
             last_activity,
             history: s.history.iter().copied().collect(),
             resume_command: String::new(),
@@ -643,6 +670,28 @@ mod tests {
         assert!(m.rows(10.0 + ACTIVE_WINDOW + 1.0, 1e12).is_empty());
         // Still listed as one of today's sessions.
         assert_eq!(m.rows(10.0 + ACTIVE_WINDOW + 1.0, 0.0).len(), 1);
+    }
+
+    #[test]
+    fn hidden_until_next_activity() {
+        let mut m = Model::default();
+        let mut s = claude_session();
+        s.hooks.apply(&hook_line(20.0, "done", ""));
+        m.sessions.insert(key(), s);
+        m.hide(&key(), 30.0);
+        let r = m.row(&key(), &m.sessions[&key()], 31.0);
+        assert_eq!((r.active, r.hidden, r.alert, r.state), (false, true, false, Display::Idle));
+        // Still listed for the app window, even before `today`.
+        assert_eq!(m.rows(31.0, 1e12).len(), 1);
+        // New activity brings it back, with its alert.
+        m.sessions.get_mut(&key()).unwrap().hooks.apply(&hook_line(40.0, "needs_you", "permission_prompt"));
+        let r = m.row(&key(), &m.sessions[&key()], 41.0);
+        assert_eq!((r.active, r.hidden, r.alert, r.state), (true, false, true, Display::NeedsYou));
+        // Unhide shows it without new activity.
+        m.hide(&key(), 50.0);
+        assert!(m.row(&key(), &m.sessions[&key()], 51.0).hidden);
+        m.unhide(&key());
+        assert!(m.row(&key(), &m.sessions[&key()], 51.0).active);
     }
 
     #[test]

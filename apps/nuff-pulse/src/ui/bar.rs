@@ -4,7 +4,7 @@
 //! and focuses its window.
 
 use super::look;
-use super::{open_row, Shared};
+use super::{open_row, Cmd, Shared};
 use eframe::egui::{
     self, Align, CornerRadius, CursorIcon, Layout, Pos2, Rect, RichText, Sense, Stroke, Ui, UiBuilder, Vec2,
     ViewportCommand,
@@ -187,6 +187,12 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
     if resp.clicked() {
         open_row(shared, r);
     }
+    resp.context_menu(|ui| {
+        if ui.button("Hide until active").on_hover_text("It comes back by itself with its next activity").clicked() {
+            shared.send(Cmd::Hide(r.key.clone()));
+            ui.close();
+        }
+    });
     // Keep it short: tooltips are drawn inside the bar's own small window.
     resp.on_hover_text(hover(r));
 
@@ -252,6 +258,6 @@ fn hover(r: &Row) -> String {
     if let Some(p) = &r.last_prompt {
         s.push_str(&format!("\n“{}”", nuff_pulse::util::short(p, 80)));
     }
-    s.push_str("\nClick: clear alert and focus window");
+    s.push_str("\nClick: focus window · right-click: hide");
     s
 }

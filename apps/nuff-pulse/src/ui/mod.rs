@@ -42,6 +42,9 @@ pub struct Published {
 
 pub enum Cmd {
     Ack(SessionKey),
+    /// Hide from the bar until the session's next activity.
+    Hide(SessionKey),
+    Unhide(SessionKey),
     Settings(Settings),
     Quit,
 }
@@ -475,6 +478,8 @@ fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: 
     loop {
         match rx.recv_timeout(Duration::from_millis(500)) {
             Ok(Cmd::Ack(key)) => engine.acknowledge(&key, util::now()),
+            Ok(Cmd::Hide(key)) => engine.hide(&key, util::now()),
+            Ok(Cmd::Unhide(key)) => engine.unhide(&key),
             Ok(Cmd::Settings(s)) => {
                 extra = s.roots();
                 engine.set_config(s.config());
@@ -494,7 +499,7 @@ fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: 
         engine.poll(now);
         let rows = engine.model.rows(now, util::start_of_today(now));
         let shown: Vec<_> =
-            rows.iter().map(|r| (r.key.clone(), r.state, r.alert, r.cache_expiring, r.active)).collect();
+            rows.iter().map(|r| (r.key.clone(), r.state, r.alert, r.cache_expiring, r.active, r.hidden)).collect();
         if engine.generation() != generation || shown != last_shown || now - last_publish >= 30.0 {
             generation = engine.generation();
             last_shown = shown;

@@ -127,7 +127,8 @@ fn sessions(ui: &mut Ui, shared: &Shared, w: &mut WinState, rows: &[Row], now: f
                     look::ring(ui, rect.center(), 5.0, r.state, r.alert, t);
                     ui.label(RichText::new(r.state.label()).color(look::state_color(ui, r.state)));
                     let is_sel = w.selected.as_ref() == Some(&r.key);
-                    if ui.selectable_label(is_sel, util::short(&r.title, 48)).clicked() {
+                    let title = if r.hidden { format!("{} (hidden)", util::short(&r.title, 40)) } else { util::short(&r.title, 48) };
+                    if ui.selectable_label(is_sel, title).clicked() {
                         w.selected = Some(r.key.clone());
                         if r.alert {
                             shared.send(Cmd::Ack(r.key.clone()));
@@ -178,6 +179,12 @@ fn detail(ui: &mut Ui, shared: &Shared, r: &Row, now: f64) {
         }
         if ui.button("Copy resume command").on_hover_text(fmt::resume(r)).clicked() {
             ui.ctx().copy_text(fmt::resume(r));
+        }
+        if r.active && ui.button("Hide from bar").on_hover_text("Until its next activity").clicked() {
+            shared.send(Cmd::Hide(r.key.clone()));
+        }
+        if r.hidden && ui.button("Show on bar").on_hover_text("Hidden until its next activity").clicked() {
+            shared.send(Cmd::Unhide(r.key.clone()));
         }
     });
     ui.add_space(6.0);
