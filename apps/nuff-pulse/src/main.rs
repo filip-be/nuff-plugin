@@ -1,23 +1,22 @@
-//! nuff-pulse. The UI comes later; for now the binary prints what the core
-//! sees, which is how the core is checked against real sessions.
+//! nuff-pulse: the widget (floating bar, tray, app window), or a text dump
+//! of what the core sees, which is how the core is checked against real
+//! sessions.
 //!
+//!   nuff-pulse            the widget
+//!   nuff-pulse --app      the widget with its app window open
 //!   nuff-pulse --dump     print today's sessions once
 //!   nuff-pulse --watch    print them again whenever something changes
+
+// No console window for the widget in release builds.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+#[cfg(windows)]
+mod ui;
 
 use nuff_pulse::engine::{Engine, Options};
 use nuff_pulse::model::{Level, Row};
 use nuff_pulse::{roots, util};
 use std::time::Duration;
-
-fn fmt_tokens(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1e6)
-    } else if n >= 1000 {
-        format!("{}k", n / 1000)
-    } else {
-        n.to_string()
-    }
-}
 
 fn fmt_left(secs: f64) -> String {
     if secs <= 0.0 {
@@ -41,8 +40,8 @@ fn print_rows(rows: &[Row], now: f64) {
     println!("{}", "-".repeat(110));
     for r in rows {
         let ctx = match (r.context, r.context_window) {
-            (Some(c), Some(w)) => format!("{}{}/{}{}", if r.context_approx { "~" } else { "" }, fmt_tokens(c), fmt_tokens(w), level(r.context_level)),
-            (Some(c), None) => format!("{}{}{}", if r.context_approx { "~" } else { "" }, fmt_tokens(c), level(r.context_level)),
+            (Some(c), Some(w)) => format!("{}{}/{}{}", if r.context_approx { "~" } else { "" }, nuff_pulse::fmt::tokens(c), nuff_pulse::fmt::tokens(w), level(r.context_level)),
+            (Some(c), None) => format!("{}{}{}", if r.context_approx { "~" } else { "" }, nuff_pulse::fmt::tokens(c), level(r.context_level)),
             _ => "-".into(),
         };
         let cache = r.cache_expires.map_or("-".into(), |e| fmt_left(e - now));
@@ -83,16 +82,35 @@ fn print_rows(rows: &[Row], now: f64) {
     }
 }
 
+/// Release builds have no console of their own: print to the one that
+/// started us, if any.
+fn attach_console() {
+    #[cfg(all(windows, not(debug_assertions)))]
+    unsafe {
+        windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let watch = match args.first().map(String::as_str) {
         Some("--dump") => false,
-        Some("--watch") | None => true,
+        Some("--watch") => true,
+        #[cfg(windows)]
+        None | Some("--app") => {
+            if let Err(e) = ui::run(args.first().is_some_and(|a| a == "--app")) {
+                eprintln!("nuff-pulse: {e}");
+                std::process::exit(1);
+            }
+            return;
+        }
         _ => {
-            eprintln!("usage: nuff-pulse [--dump | --watch]");
+            attach_console();
+            eprintln!("usage: nuff-pulse [--app | --dump | --watch]");
             std::process::exit(2);
         }
     };
+    attach_console();
     let mut engine = Engine::new(roots::default_roots(), Options { watch, ..Options::default() });
     let now = util::now();
     engine.start(now);

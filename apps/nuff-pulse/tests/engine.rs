@@ -267,3 +267,39 @@ fn claude_liveness_by_agent_pid_or_status_pid() {
     wsl.apply(&parse_line(r#"{"v":1,"t":1,"runtime":"claude","session_id":"a","host":{"os":"wsl","agent_pid":900}}"#).unwrap());
     assert_eq!(claude_liveness(&probe(&[(900, true)]), &wsl, None), Liveness::Unknown);
 }
+
+#[test]
+fn roots_change_keeps_offsets_and_ends_stopped_wsl_sessions() {
+    let setup = Setup::new("roots");
+    let events = copy_copilot_fixture(&setup, "vscode", VSCODE_ID, None);
+    // The same folder, seen as a WSL distro's root.
+    let wsl_dir = setup.dir.join("wsl-copilot");
+    let wsl_session = wsl_dir.join("session-state").join("wsl-1");
+    std::fs::create_dir_all(&wsl_session).unwrap();
+    std::fs::copy(&events, wsl_session.join("events.jsonl")).unwrap();
+    let wsl_root = Root { kind: RootKind::Copilot, path: wsl_dir, origin: Origin::Wsl("Ubuntu".into()), poll: true };
+
+    let t = parse_iso("2025-11-24T16:01:00Z").unwrap();
+    let mut e = setup.engine();
+    e.start(t);
+    let windows = key(Runtime::Copilot, VSCODE_ID);
+    let wsl = SessionKey { runtime: Runtime::Copilot, origin: Origin::Wsl("Ubuntu".into()), id: "wsl-1".into() };
+    assert!(!e.model.sessions.contains_key(&wsl));
+
+    // The distro starts: its root is added and read.
+    let mut with_wsl = setup.roots();
+    with_wsl.push(wsl_root);
+    e.set_roots(with_wsl, t);
+    assert!(e.model.sessions.contains_key(&wsl));
+    let before = e.model.sessions[&windows].copilot.as_ref().unwrap().last_write_t;
+
+    // It stops: its sessions end; the Windows log is not read again.
+    e.set_roots(setup.roots(), t + 1.0);
+    let row = e.model.row(&wsl, &e.model.sessions[&wsl], t + 1.0);
+    assert_eq!(row.state, Display::Ended);
+    assert_eq!(e.model.sessions[&windows].copilot.as_ref().unwrap().last_write_t, before);
+    // Only the WSL session was marked not live by the change.
+    assert_eq!(e.model.sessions[&wsl].live_t, t + 1.0);
+    assert_ne!(e.model.sessions[&windows].live_t, t + 1.0);
+    assert!(!e.poll(t + 1.5), "nothing new to read");
+}

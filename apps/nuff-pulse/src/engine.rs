@@ -163,6 +163,46 @@ impl Engine {
         self.generation != before
     }
 
+    /// Replaces the roots (settings changed, a WSL distro started or
+    /// stopped). Files of roots that stay keep their read offsets; sessions
+    /// of a WSL distro that no longer runs end.
+    pub fn set_roots(&mut self, roots: Vec<Root>, now: f64) {
+        if roots == self.roots {
+            return;
+        }
+        let map: Vec<Option<usize>> = self.roots.iter().map(|r| roots.iter().position(|n| n == r)).collect();
+        self.files.retain(|_, t| map[t.root].is_some());
+        for t in self.files.values_mut() {
+            t.root = map[t.root].unwrap_or(t.root);
+        }
+        let keep: HashSet<PathBuf> =
+            roots.iter().filter(|r| !r.poll).flat_map(|r| roots::watch_dirs(r).into_iter().map(|(d, _)| d)).collect();
+        if let Some(w) = self.watcher.as_mut() {
+            use notify::Watcher;
+            for d in self.watched.iter().filter(|d| !keep.contains(*d)) {
+                let _ = w.unwatch(d);
+            }
+        }
+        self.watched.retain(|d| keep.contains(d));
+        self.roots = roots;
+        let origins: HashSet<Origin> = self.roots.iter().map(|r| r.origin.clone()).collect();
+        for (key, s) in self.model.sessions.iter_mut() {
+            if matches!(key.origin, Origin::Wsl(_)) && !origins.contains(&key.origin) && s.live != Liveness::NotLive {
+                s.live = Liveness::NotLive;
+                s.live_t = now;
+                s.note_state();
+            }
+        }
+        self.rescan(now, None);
+        self.generation += 1;
+    }
+
+    /// Replaces the context window overrides.
+    pub fn set_config(&mut self, config: crate::model::Config) {
+        self.model.config = config;
+        self.generation += 1;
+    }
+
     /// Clears a session's alert (row clicked).
     pub fn acknowledge(&mut self, key: &SessionKey, now: f64) {
         self.model.acknowledge(key, now);
