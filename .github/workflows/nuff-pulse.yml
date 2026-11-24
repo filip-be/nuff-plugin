@@ -60,10 +60,12 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/nuff-pulse
+      - name: Format
+        run: cargo fmt --check
       - name: Test
         run: cargo test --locked
       - name: Clippy
@@ -76,7 +78,7 @@ jobs:
           $size = (Get-Item target/release/nuff-pulse.exe).Length
           "nuff-pulse.exe: {0:N2} MB" -f ($size / 1MB)
           if ($size -ge 5MB) { throw "nuff-pulse.exe is $size bytes, over the 5 MB budget" }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nuff-pulse-exe
           path: apps/nuff-pulse/target/release/nuff-pulse.exe
@@ -91,7 +93,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: nuff-pulse-exe
           path: dist

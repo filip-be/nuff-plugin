@@ -51,14 +51,23 @@ pub struct Tailer {
 
 impl Tailer {
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Tailer { path: path.into(), offset: 0, partial: Vec::new(), opened: false, anchors: &[] }
+        Tailer {
+            path: path.into(),
+            offset: 0,
+            partial: Vec::new(),
+            opened: false,
+            anchors: &[],
+        }
     }
 
     /// On first open of a large file, the tail window grows until one of its
     /// lines contains one of `anchors` (substrings of the records that carry
     /// state), up to `MAX_TAIL_BYTES` or the head.
     pub fn with_anchors(path: impl Into<PathBuf>, anchors: &'static [&'static str]) -> Self {
-        Tailer { anchors, ..Tailer::new(path) }
+        Tailer {
+            anchors,
+            ..Tailer::new(path)
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -103,7 +112,9 @@ impl Tailer {
                         lines.remove(0);
                     }
                     let anchored = self.anchors.is_empty()
-                        || lines.iter().any(|l| self.anchors.iter().any(|a| l.contains(a)));
+                        || lines
+                            .iter()
+                            .any(|l| self.anchors.iter().any(|a| l.contains(a)));
                     if anchored || start == cut || window >= MAX_TAIL_BYTES {
                         chunk.skipped = start > cut;
                         chunk.lines = lines;
@@ -172,13 +183,18 @@ mod tests {
     use std::io::Write;
 
     fn tmp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("nuff-pulse-tailer-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("nuff-pulse-tailer-{}-{name}", std::process::id()));
         let _ = std::fs::remove_file(&dir);
         dir
     }
 
     fn append(p: &Path, s: &str) {
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(p).unwrap();
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+            .unwrap();
         f.write_all(s.as_bytes()).unwrap();
     }
 
@@ -258,7 +274,14 @@ mod tests {
         // Head and tail never overlap.
         assert_eq!(c.head.len() + c.lines.len(), 13_001);
         let mut plain = Tailer::new(&p);
-        assert!(!plain.read().unwrap().lines.iter().any(|l| l.contains("ANCHOR")));
+        assert!(
+            !plain
+                .read()
+                .unwrap()
+                .lines
+                .iter()
+                .any(|l| l.contains("ANCHOR"))
+        );
         std::fs::remove_file(&p).unwrap();
     }
 }

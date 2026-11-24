@@ -22,7 +22,11 @@ fn fmt_left(secs: f64) -> String {
     if secs <= 0.0 {
         "cold".into()
     } else if secs >= 3600.0 {
-        format!("{}h{:02}m", (secs / 3600.0) as u64, ((secs % 3600.0) / 60.0) as u64)
+        format!(
+            "{}h{:02}m",
+            (secs / 3600.0) as u64,
+            ((secs % 3600.0) / 60.0) as u64
+        )
     } else {
         format!("{}:{:02}", (secs / 60.0) as u64, (secs % 60.0) as u64)
     }
@@ -40,8 +44,19 @@ fn print_rows(rows: &[Row], now: f64) {
     println!("{}", "-".repeat(110));
     for r in rows {
         let ctx = match (r.context, r.context_window) {
-            (Some(c), Some(w)) => format!("{}{}/{}{}", if r.context_approx { "~" } else { "" }, nuff_pulse::fmt::tokens(c), nuff_pulse::fmt::tokens(w), level(r.context_level)),
-            (Some(c), None) => format!("{}{}{}", if r.context_approx { "~" } else { "" }, nuff_pulse::fmt::tokens(c), level(r.context_level)),
+            (Some(c), Some(w)) => format!(
+                "{}{}/{}{}",
+                if r.context_approx { "~" } else { "" },
+                nuff_pulse::fmt::tokens(c),
+                nuff_pulse::fmt::tokens(w),
+                level(r.context_level)
+            ),
+            (Some(c), None) => format!(
+                "{}{}{}",
+                if r.context_approx { "~" } else { "" },
+                nuff_pulse::fmt::tokens(c),
+                level(r.context_level)
+            ),
             _ => "-".into(),
         };
         let cache = r.cache_expires.map_or("-".into(), |e| fmt_left(e - now));
@@ -87,7 +102,9 @@ fn print_rows(rows: &[Row], now: f64) {
 fn attach_console() {
     #[cfg(all(windows, not(debug_assertions)))]
     unsafe {
-        windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
+        windows_sys::Win32::System::Console::AttachConsole(
+            windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS,
+        );
     }
 }
 
@@ -111,7 +128,13 @@ fn main() {
         }
     };
     attach_console();
-    let mut engine = Engine::new(roots::default_roots(), Options { watch, ..Options::default() });
+    let mut engine = Engine::new(
+        roots::default_roots(),
+        Options {
+            watch,
+            ..Options::default()
+        },
+    );
     let now = util::now();
     engine.start(now);
     let today = util::start_of_today(now);
@@ -123,7 +146,9 @@ fn main() {
     // Time-driven changes (a provisional Done's alert after 3 s, a session
     // leaving the 2 h window) change rows without any file change.
     let shown = |rows: &[Row]| -> Vec<(String, &'static str, bool)> {
-        rows.iter().map(|r| (r.key.id.clone(), r.state.label(), r.alert)).collect()
+        rows.iter()
+            .map(|r| (r.key.id.clone(), r.state.label(), r.alert))
+            .collect()
     };
     let mut last_shown = shown(&engine.model.rows(now, today));
     loop {

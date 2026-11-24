@@ -36,16 +36,23 @@ pub enum FileRef {
 
 impl FileRef {
     pub fn is_log(&self) -> bool {
-        matches!(self, FileRef::ClaudeTranscript(_) | FileRef::CopilotEvents(_) | FileRef::Pulse(..))
+        matches!(
+            self,
+            FileRef::ClaudeTranscript(_) | FileRef::CopilotEvents(_) | FileRef::Pulse(..)
+        )
     }
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from)
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
 }
 
 fn env_dir(name: &str) -> Option<PathBuf> {
-    std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from)
+    std::env::var_os(name)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// The Windows roots: `CLAUDE_CONFIG_DIR` or `~/.claude`, `COPILOT_HOME` or
@@ -55,19 +62,36 @@ pub fn default_roots() -> Vec<Root> {
     let home = home();
     let mut add = |kind, path: Option<PathBuf>| {
         if let Some(path) = path {
-            roots.push(Root { kind, path, origin: Origin::Windows, poll: false });
+            roots.push(Root {
+                kind,
+                path,
+                origin: Origin::Windows,
+                poll: false,
+            });
         }
     };
-    add(RootKind::Claude, env_dir("CLAUDE_CONFIG_DIR").or(home.as_ref().map(|h| h.join(".claude"))));
-    add(RootKind::Copilot, env_dir("COPILOT_HOME").or(home.as_ref().map(|h| h.join(".copilot"))));
-    add(RootKind::Pulse, home.as_ref().map(|h| h.join(".nuff-pulse")));
+    add(
+        RootKind::Claude,
+        env_dir("CLAUDE_CONFIG_DIR").or(home.as_ref().map(|h| h.join(".claude"))),
+    );
+    add(
+        RootKind::Copilot,
+        env_dir("COPILOT_HOME").or(home.as_ref().map(|h| h.join(".copilot"))),
+    );
+    add(
+        RootKind::Pulse,
+        home.as_ref().map(|h| h.join(".nuff-pulse")),
+    );
     roots
 }
 
 /// Directories to watch for a root, with recursion.
 pub fn watch_dirs(root: &Root) -> Vec<(PathBuf, bool)> {
     match root.kind {
-        RootKind::Claude => vec![(root.path.join("projects"), true), (root.path.join("sessions"), false)],
+        RootKind::Claude => vec![
+            (root.path.join("projects"), true),
+            (root.path.join("sessions"), false),
+        ],
         RootKind::Copilot => vec![(root.path.join("session-state"), true)],
         RootKind::Pulse => vec![(root.path.join("sessions"), false)],
     }
@@ -110,7 +134,9 @@ pub fn classify(root: &Root, path: &Path) -> Option<FileRef> {
 /// `inuse.1234.hold` / `inuse.1234.lock` → 1234.
 pub fn lock_pid(file: &str) -> Option<u32> {
     let rest = file.strip_prefix("inuse.")?;
-    let num = rest.strip_suffix(".hold").or_else(|| rest.strip_suffix(".lock"))?;
+    let num = rest
+        .strip_suffix(".hold")
+        .or_else(|| rest.strip_suffix(".lock"))?;
     num.parse().ok()
 }
 
@@ -128,8 +154,14 @@ pub fn list(root: &Root) -> Vec<(PathBuf, FileRef, f64)> {
     let mtime = |e: &std::fs::DirEntry| {
         // A listing's metadata describes a link itself, not its target.
         let link = e.file_type().is_ok_and(|t| t.is_symlink());
-        let m = if poll && !link { e.metadata() } else { std::fs::metadata(e.path()) };
-        m.and_then(|m| m.modified()).map(crate::util::unix).unwrap_or(0.0)
+        let m = if poll && !link {
+            e.metadata()
+        } else {
+            std::fs::metadata(e.path())
+        };
+        m.and_then(|m| m.modified())
+            .map(crate::util::unix)
+            .unwrap_or(0.0)
     };
     let entries = |p: &Path| std::fs::read_dir(p).into_iter().flatten().flatten();
     let is_dir = |e: &std::fs::DirEntry| match e.file_type() {
@@ -148,14 +180,18 @@ pub fn list(root: &Root) -> Vec<(PathBuf, FileRef, f64)> {
     match root.kind {
         RootKind::Claude => {
             for project in entries(&root.path.join("projects")).filter(is_dir) {
-                entries(&project.path()).filter(|e| e.path().extension().is_some_and(|x| x == "jsonl")).for_each(|e| push(&e));
+                entries(&project.path())
+                    .filter(|e| e.path().extension().is_some_and(|x| x == "jsonl"))
+                    .for_each(|e| push(&e));
             }
             entries(&root.path.join("sessions")).for_each(|e| push(&e));
         }
         RootKind::Copilot => {
             for session in entries(&root.path.join("session-state")).filter(is_dir) {
                 entries(&session.path())
-                    .filter(|e| e.file_name() == "events.jsonl" || e.file_name() == "workspace.yaml")
+                    .filter(|e| {
+                        e.file_name() == "events.jsonl" || e.file_name() == "workspace.yaml"
+                    })
                     .for_each(|e| push(&e));
             }
         }
@@ -169,7 +205,12 @@ mod tests {
     use super::*;
 
     fn root(kind: RootKind) -> Root {
-        Root { kind, path: PathBuf::from("/r"), origin: Origin::Windows, poll: false }
+        Root {
+            kind,
+            path: PathBuf::from("/r"),
+            origin: Origin::Windows,
+            poll: false,
+        }
     }
 
     #[test]
@@ -179,17 +220,35 @@ mod tests {
             classify(&c, Path::new("/r/projects/D--x/0b1c-22.jsonl")),
             Some(FileRef::ClaudeTranscript("0b1c-22".into()))
         );
-        assert_eq!(classify(&c, Path::new("/r/projects/D--x/abc/subagents/agent-1.jsonl")), None);
-        assert_eq!(classify(&c, Path::new("/r/sessions/16624.json")), Some(FileRef::ClaudeStatus(16624)));
+        assert_eq!(
+            classify(
+                &c,
+                Path::new("/r/projects/D--x/abc/subagents/agent-1.jsonl")
+            ),
+            None
+        );
+        assert_eq!(
+            classify(&c, Path::new("/r/sessions/16624.json")),
+            Some(FileRef::ClaudeStatus(16624))
+        );
         assert_eq!(classify(&c, Path::new("/r/sessions/16624.abc.key")), None);
         let k = root(RootKind::Copilot);
-        assert_eq!(classify(&k, Path::new("/r/session-state/ab-1/events.jsonl")), Some(FileRef::CopilotEvents("ab-1".into())));
+        assert_eq!(
+            classify(&k, Path::new("/r/session-state/ab-1/events.jsonl")),
+            Some(FileRef::CopilotEvents("ab-1".into()))
+        );
         assert_eq!(
             classify(&k, Path::new("/r/session-state/ab-1/workspace.yaml")),
             Some(FileRef::CopilotWorkspace("ab-1".into()))
         );
-        assert_eq!(classify(&k, Path::new("/r/session-state/ab-1/inuse.49592.hold")), Some(FileRef::CopilotLock("ab-1".into())));
-        assert_eq!(classify(&k, Path::new("/r/session-state/ab-1/session.db")), None);
+        assert_eq!(
+            classify(&k, Path::new("/r/session-state/ab-1/inuse.49592.hold")),
+            Some(FileRef::CopilotLock("ab-1".into()))
+        );
+        assert_eq!(
+            classify(&k, Path::new("/r/session-state/ab-1/session.db")),
+            None
+        );
         let p = root(RootKind::Pulse);
         assert_eq!(
             classify(&p, Path::new("/r/sessions/copilot-ab-1.hooks.jsonl")),
@@ -216,7 +275,12 @@ mod tests {
         mk("k/session-state/ab-1/session.db");
         mk("p/sessions/copilot-ab-1.hooks.jsonl");
         for poll in [false, true] {
-            let r = |kind, dir: &str| Root { kind, path: base.join(dir), origin: Origin::Windows, poll };
+            let r = |kind, dir: &str| Root {
+                kind,
+                path: base.join(dir),
+                origin: Origin::Windows,
+                poll,
+            };
             let names = |root: Root| {
                 let mut v: Vec<FileRef> = list(&root)
                     .into_iter()
@@ -228,13 +292,22 @@ mod tests {
             };
             assert_eq!(
                 names(r(RootKind::Claude, "c")),
-                vec![FileRef::ClaudeStatus(16624), FileRef::ClaudeTranscript("0b1c-22".into())]
+                vec![
+                    FileRef::ClaudeStatus(16624),
+                    FileRef::ClaudeTranscript("0b1c-22".into())
+                ]
             );
             assert_eq!(
                 names(r(RootKind::Copilot, "k")),
-                vec![FileRef::CopilotEvents("ab-1".into()), FileRef::CopilotWorkspace("ab-1".into())]
+                vec![
+                    FileRef::CopilotEvents("ab-1".into()),
+                    FileRef::CopilotWorkspace("ab-1".into())
+                ]
             );
-            assert_eq!(names(r(RootKind::Pulse, "p")), vec![FileRef::Pulse(Runtime::Copilot, "ab-1".into())]);
+            assert_eq!(
+                names(r(RootKind::Pulse, "p")),
+                vec![FileRef::Pulse(Runtime::Copilot, "ab-1".into())]
+            );
         }
         let _ = std::fs::remove_dir_all(&base);
     }

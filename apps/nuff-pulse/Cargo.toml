@@ -1,7 +1,7 @@
 [package]
 name = "nuff-pulse"
-version = "0.1.0"
-edition = "2021"
+version = "1.0.0"
+edition = "2024"
 description = "Windows widget listing active local Claude and GitHub Copilot agent sessions"
 license = "MIT"
 publish = false

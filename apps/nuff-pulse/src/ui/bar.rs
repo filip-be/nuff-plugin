@@ -4,10 +4,10 @@
 //! and focuses its window.
 
 use super::look;
-use super::{open_row, Cmd, Shared};
+use super::{Cmd, Shared, open_row};
 use eframe::egui::{
-    self, Align, CornerRadius, CursorIcon, Layout, Pos2, Rect, RichText, Sense, Stroke, Ui, UiBuilder, Vec2,
-    ViewportCommand,
+    self, Align, CornerRadius, CursorIcon, Layout, Pos2, Rect, RichText, Sense, Stroke, Ui,
+    UiBuilder, Vec2, ViewportCommand,
 };
 use nuff_pulse::fmt;
 use nuff_pulse::model::{Display, Row};
@@ -31,7 +31,10 @@ pub struct BarOut {
 fn frame(ui: &Ui) -> egui::Frame {
     egui::Frame::NONE
         .fill(ui.visuals().panel_fill)
-        .stroke(Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color))
+        .stroke(Stroke::new(
+            1.0,
+            ui.visuals().widgets.noninteractive.bg_stroke.color,
+        ))
         .inner_margin(PAD)
 }
 
@@ -47,7 +50,11 @@ pub fn show(ui: &mut Ui, shared: &Shared, rows: &[Row], now: f64, mode: BarMode)
     // press, so dragging or clicking on text would do nothing.
     ui.style_mut().interaction.selectable_labels = false;
     let active: Vec<&Row> = rows.iter().filter(|r| r.active).collect();
-    let mut out = BarOut { size: Vec2::ZERO, toggle_mode: false, open_app: false };
+    let mut out = BarOut {
+        size: Vec2::ZERO,
+        toggle_mode: false,
+        open_app: false,
+    };
     let t = ui.input(|i| i.time);
     let full = ui.max_rect();
     // The whole window is a drag handle; rows and buttons on top take their
@@ -67,8 +74,18 @@ pub fn show(ui: &mut Ui, shared: &Shared, rows: &[Row], now: f64, mode: BarMode)
     out
 }
 
-fn pill(ui: &mut Ui, active: &[&Row], now: f64, t: f64, bg: &egui::Response, toggle: &mut bool) -> Vec2 {
-    let s = fmt::summary(&active.iter().map(|r| (*r).clone()).collect::<Vec<_>>(), now);
+fn pill(
+    ui: &mut Ui,
+    active: &[&Row],
+    now: f64,
+    t: f64,
+    bg: &egui::Response,
+    toggle: &mut bool,
+) -> Vec2 {
+    let s = fmt::summary(
+        &active.iter().map(|r| (*r).clone()).collect::<Vec<_>>(),
+        now,
+    );
     let resp = ui
         .horizontal(|ui| {
             ui.set_height(PILL_H - 2.0 * PAD - 2.0);
@@ -76,23 +93,43 @@ fn pill(ui: &mut Ui, active: &[&Row], now: f64, t: f64, bg: &egui::Response, tog
             let lead = active.first().map_or(Display::Idle, |r| r.state);
             let alert = active.first().is_some_and(|r| r.alert);
             let (rect, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
-            let state = if s.working > 0 && !alert { Display::Working } else { lead };
+            let state = if s.working > 0 && !alert {
+                Display::Working
+            } else {
+                lead
+            };
             look::ring(ui, rect.center(), 6.5, state, alert, t);
             let mut any = false;
-            for (n, st) in [(s.needs_you, Display::NeedsYou), (s.error, Display::Error), (s.done, Display::Done), (s.working, Display::Working)] {
+            for (n, st) in [
+                (s.needs_you, Display::NeedsYou),
+                (s.error, Display::Error),
+                (s.done, Display::Done),
+                (s.working, Display::Working),
+            ] {
                 if n > 0 {
                     any = true;
-                    ui.label(RichText::new(format!("{n} {}", st.label().to_lowercase())).color(look::state_color(ui, st)).strong());
+                    ui.label(
+                        RichText::new(format!("{n} {}", st.label().to_lowercase()))
+                            .color(look::state_color(ui, st))
+                            .strong(),
+                    );
                 }
             }
             if !any {
-                let text = if s.active == 0 { "no sessions".to_string() } else { format!("{} idle", s.active) };
+                let text = if s.active == 0 {
+                    "no sessions".to_string()
+                } else {
+                    format!("{} idle", s.active)
+                };
                 ui.label(RichText::new(text).weak());
             }
             if let Some(left) = s.urgent_cache {
                 ui.separator();
                 let lvl = nuff_pulse::model::cache_level(left);
-                ui.label(RichText::new(format!("cache {}", fmt::left(left))).color(look::cache_color(ui, lvl)));
+                ui.label(
+                    RichText::new(format!("cache {}", fmt::left(left)))
+                        .color(look::cache_color(ui, lvl)),
+                );
             }
         })
         .response;
@@ -109,7 +146,10 @@ fn grip(ui: &mut Ui) {
     let c = ui.visuals().weak_text_color();
     for i in 0..3 {
         for j in 0..2 {
-            let p = Pos2::new(rect.left() + 2.0 + j as f32 * 5.0, rect.top() + 3.0 + i as f32 * 5.0);
+            let p = Pos2::new(
+                rect.left() + 2.0 + j as f32 * 5.0,
+                rect.top() + 3.0 + i as f32 * 5.0,
+            );
             ui.painter().circle_filled(p, 1.3, c);
         }
     }
@@ -125,19 +165,40 @@ fn list(ui: &mut Ui, shared: &Shared, active: &[&Row], now: f64, t: f64, out: &m
         ui.set_height(HEADER_H - 4.0);
         grip(ui);
         ui.label(RichText::new("nuff-pulse").strong());
-        let s = fmt::summary(&active.iter().map(|r| (*r).clone()).collect::<Vec<_>>(), now);
+        let s = fmt::summary(
+            &active.iter().map(|r| (*r).clone()).collect::<Vec<_>>(),
+            now,
+        );
         if s.active > 0 {
-            ui.label(RichText::new(format!("{} session{}", s.active, if s.active == 1 { "" } else { "s" })).weak());
+            ui.label(
+                RichText::new(format!(
+                    "{} session{}",
+                    s.active,
+                    if s.active == 1 { "" } else { "s" }
+                ))
+                .weak(),
+            );
         }
         if s.alerts > 0 {
-            ui.label(RichText::new(format!("{} new", s.alerts)).color(look::state_color(ui, Display::NeedsYou)));
+            ui.label(
+                RichText::new(format!("{} new", s.alerts))
+                    .color(look::state_color(ui, Display::NeedsYou)),
+            );
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let btn = |text: &str| egui::Button::new(text).min_size(Vec2::new(30.0, 26.0));
-            if ui.add(btn("–")).on_hover_text("Collapse to pill (hotkey toggles)").clicked() {
+            if ui
+                .add(btn("–"))
+                .on_hover_text("Collapse to pill (hotkey toggles)")
+                .clicked()
+            {
                 out.toggle_mode = true;
             }
-            if ui.add(btn("app")).on_hover_text("Open the app window").clicked() {
+            if ui
+                .add(btn("app"))
+                .on_hover_text("Open the app window")
+                .clicked()
+            {
                 out.open_app = true;
             }
         });
@@ -150,12 +211,16 @@ fn list(ui: &mut Ui, shared: &Shared, active: &[&Row], now: f64, t: f64, out: &m
     }
     let shown = active.len().min(MAX_ROWS);
     let rows_h = shown as f32 * ROW_H;
-    egui::ScrollArea::vertical().max_height(rows_h).min_scrolled_height(rows_h).auto_shrink([false, true]).show(ui, |ui| {
-        ui.spacing_mut().item_spacing.y = 0.0;
-        for (i, r) in active.iter().enumerate() {
-            row(ui, shared, r, now, t, i > 0);
-        }
-    });
+    egui::ScrollArea::vertical()
+        .max_height(rows_h)
+        .min_scrolled_height(rows_h)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            for (i, r) in active.iter().enumerate() {
+                row(ui, shared, r, now, t, i > 0);
+            }
+        });
     header_h + rows_h
 }
 
@@ -172,23 +237,54 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
     drag_window(ui, &resp);
     let p = ui.painter();
     if separator {
-        p.hline(rect.x_range(), rect.top(), Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color.gamma_multiply(0.6)));
+        p.hline(
+            rect.x_range(),
+            rect.top(),
+            Stroke::new(
+                1.0,
+                ui.visuals()
+                    .widgets
+                    .noninteractive
+                    .bg_stroke
+                    .color
+                    .gamma_multiply(0.6),
+            ),
+        );
     }
     if r.alert {
         // Alert rows stand out: a tinted background and a coloured edge.
         let c = look::state_color(ui, r.state);
-        p.rect_filled(rect.shrink2(Vec2::new(0.0, 1.0)), CornerRadius::same(4), c.gamma_multiply(0.10));
-        let edge = Rect::from_min_size(rect.left_top() + Vec2::new(0.0, 7.0), Vec2::new(3.0, ROW_H - 14.0));
+        p.rect_filled(
+            rect.shrink2(Vec2::new(0.0, 1.0)),
+            CornerRadius::same(4),
+            c.gamma_multiply(0.10),
+        );
+        let edge = Rect::from_min_size(
+            rect.left_top() + Vec2::new(0.0, 7.0),
+            Vec2::new(3.0, ROW_H - 14.0),
+        );
         p.rect_filled(edge, CornerRadius::same(2), c);
     }
     if resp.hovered() {
-        p.rect_filled(rect.shrink2(Vec2::new(0.0, 1.0)), CornerRadius::same(4), ui.visuals().widgets.hovered.weak_bg_fill.gamma_multiply(0.7));
+        p.rect_filled(
+            rect.shrink2(Vec2::new(0.0, 1.0)),
+            CornerRadius::same(4),
+            ui.visuals()
+                .widgets
+                .hovered
+                .weak_bg_fill
+                .gamma_multiply(0.7),
+        );
     }
     if resp.clicked() {
         open_row(shared, r);
     }
     resp.context_menu(|ui| {
-        if ui.button("Hide until active").on_hover_text("It comes back by itself with its next activity").clicked() {
+        if ui
+            .button("Hide until active")
+            .on_hover_text("It comes back by itself with its next activity")
+            .clicked()
+        {
             shared.send(Cmd::Hide(r.key.clone()));
             ui.close();
         }
@@ -202,10 +298,14 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
     look::ring(ui, ring_c, 6.5, r.state, r.alert, t);
     let half = inner.height() / 2.0;
     let fig_left = inner.right() - FIGURES_W;
-    let mid = Rect::from_min_max(Pos2::new(inner.left() + 26.0, inner.top()), Pos2::new(fig_left - 8.0, inner.bottom()));
+    let mid = Rect::from_min_max(
+        Pos2::new(inner.left() + 26.0, inner.top()),
+        Pos2::new(fig_left - 8.0, inner.bottom()),
+    );
     let fig = Rect::from_min_max(Pos2::new(fig_left, inner.top()), inner.right_bottom());
     let top = |c: Rect| Rect::from_min_size(c.min, Vec2::new(c.width(), half));
-    let bottom = |c: Rect| Rect::from_min_size(c.min + Vec2::new(0.0, half), Vec2::new(c.width(), half));
+    let bottom =
+        |c: Rect| Rect::from_min_size(c.min + Vec2::new(0.0, half), Vec2::new(c.width(), half));
     let left = Layout::left_to_right(Align::Center);
     let right = Layout::right_to_left(Align::Center);
 
@@ -220,7 +320,11 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
         // What it does or waits on; a finished turn's last tool is noise.
         let what = match r.state {
             Display::Working => r.activity.as_ref(),
-            Display::NeedsYou | Display::Error => r.detail.as_ref().or(r.reason.as_ref()).or(r.activity.as_ref()),
+            Display::NeedsYou | Display::Error => r
+                .detail
+                .as_ref()
+                .or(r.reason.as_ref())
+                .or(r.activity.as_ref()),
             _ => None,
         };
         if let Some(a) = what {
@@ -228,9 +332,17 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
             second.push_str(a);
         }
         if r.subagents > 0 {
-            second.push_str(&format!(" · {} subagent{}", r.subagents, if r.subagents == 1 { "" } else { "s" }));
+            second.push_str(&format!(
+                " · {} subagent{}",
+                r.subagents,
+                if r.subagents == 1 { "" } else { "s" }
+            ));
         }
-        let color = if r.alert { look::state_color(ui, r.state) } else { ui.visuals().weak_text_color() };
+        let color = if r.alert {
+            look::state_color(ui, r.state)
+        } else {
+            ui.visuals().weak_text_color()
+        };
         ui.add(egui::Label::new(RichText::new(second).small().color(color)).truncate());
     });
     line(ui, top(fig), right, |ui| {
@@ -238,15 +350,30 @@ fn row(ui: &mut Ui, shared: &Shared, r: &Row, now: f64, t: f64, separator: bool)
         if let Some(e) = r.cache_expires {
             let left = e - now;
             let lvl = nuff_pulse::model::cache_level(left);
-            ui.label(RichText::new(fmt::left(left)).color(look::cache_color(ui, lvl)).monospace());
+            ui.label(
+                RichText::new(fmt::left(left))
+                    .color(look::cache_color(ui, lvl))
+                    .monospace(),
+            );
         }
         let ctx_text = fmt::context(r);
         if !ctx_text.is_empty() {
-            ui.label(RichText::new(ctx_text).color(look::level_color(ui, r.context_level)).monospace());
+            ui.label(
+                RichText::new(ctx_text)
+                    .color(look::level_color(ui, r.context_level))
+                    .monospace(),
+            );
         }
     });
     line(ui, bottom(fig), right, |ui| {
-        ui.add(egui::Label::new(RichText::new(fmt::place(r)).small().color(ui.visuals().weak_text_color())).truncate());
+        ui.add(
+            egui::Label::new(
+                RichText::new(fmt::place(r))
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            )
+            .truncate(),
+        );
     });
 }
 

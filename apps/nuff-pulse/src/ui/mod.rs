@@ -21,7 +21,7 @@ use nuff_pulse::shell::{Shell, ShellEvent, TrayState};
 use nuff_pulse::{desktop, fmt, util, wsl};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -70,7 +70,9 @@ impl Shared {
 
     /// Pushes alert count, blink and tooltip to the tray.
     pub fn push_tray(&self, rows: &[Row]) {
-        let Some(shell) = self.shell.lock().unwrap().clone() else { return };
+        let Some(shell) = self.shell.lock().unwrap().clone() else {
+            return;
+        };
         let s = fmt::summary(rows, util::now());
         shell.set_tray(TrayState {
             alerts: s.alerts,
@@ -104,7 +106,11 @@ pub fn run(open_app: bool) -> eframe::Result {
         return Ok(());
     }
     let settings = Settings::load();
-    let icon = egui::IconData { rgba: nuff_pulse::icon::render(64, 0, true), width: 64, height: 64 };
+    let icon = egui::IconData {
+        rgba: nuff_pulse::icon::render(64, 0, true),
+        width: 64,
+        height: 64,
+    };
     let opts = eframe::NativeOptions {
         viewport: ViewportBuilder::default()
             .with_title("nuff-pulse")
@@ -118,7 +124,11 @@ pub fn run(open_app: bool) -> eframe::Result {
         persist_window: false,
         ..Default::default()
     };
-    eframe::run_native("nuff-pulse", opts, Box::new(move |cc| Ok(Box::new(App::new(cc, settings, open_app)))))
+    eframe::run_native(
+        "nuff-pulse",
+        opts,
+        Box::new(move |cc| Ok(Box::new(App::new(cc, settings, open_app)))),
+    )
 }
 
 struct App {
@@ -154,7 +164,11 @@ impl App {
         let shared = Arc::new(Shared {
             data: Mutex::new(Published::default()),
             cmd: Mutex::new(tx),
-            events: Mutex::new(if open_app { VecDeque::from([ShellEvent::OpenApp]) } else { VecDeque::new() }),
+            events: Mutex::new(if open_app {
+                VecDeque::from([ShellEvent::OpenApp])
+            } else {
+                VecDeque::new()
+            }),
             bar_visible: AtomicBool::new(settings.bar_visible),
             app_open: AtomicBool::new(false),
             shell: Mutex::new(None),
@@ -167,12 +181,18 @@ impl App {
                 ev_ctx.request_repaint_of(ViewportId::ROOT);
             },
             settings::parse_hotkey(&settings.hotkey),
-            TrayState { tooltip: "nuff-pulse".into(), bar_visible: settings.bar_visible, ..Default::default() },
+            TrayState {
+                tooltip: "nuff-pulse".into(),
+                bar_visible: settings.bar_visible,
+                ..Default::default()
+            },
         );
         *shared.shell.lock().unwrap() = shell.map(Arc::new);
         {
             let (shared, ctx, settings) = (shared.clone(), ctx.clone(), settings.clone());
-            let _ = std::thread::Builder::new().name("nuff-pulse-engine".into()).spawn(move || worker(ctx, shared, rx, settings));
+            let _ = std::thread::Builder::new()
+                .name("nuff-pulse-engine".into())
+                .spawn(move || worker(ctx, shared, rx, settings));
         }
         let win = Arc::new(Mutex::new(window::WinState::new(&settings)));
         App {
@@ -203,7 +223,9 @@ impl App {
         if desktop::is_visible(self.hwnd) != want {
             desktop::set_visible(self.hwnd, want);
         }
-        self.shared.bar_visible.store(self.settings.bar_visible, Ordering::Relaxed);
+        self.shared
+            .bar_visible
+            .store(self.settings.bar_visible, Ordering::Relaxed);
         self.shared.push_tray(&self.shared.rows());
     }
 
@@ -218,7 +240,13 @@ impl App {
             if settings_tab {
                 w.tab = window::Tab::Settings;
             }
-            w.hotkey_ok = self.shared.shell.lock().unwrap().as_ref().and_then(|s| s.hotkey_ok());
+            w.hotkey_ok = self
+                .shared
+                .shell
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|s| s.hotkey_ok());
         }
         self.shared.app_open.store(true, Ordering::Relaxed);
         let id = app_viewport();
@@ -235,7 +263,8 @@ impl App {
             return;
         }
         self.layout = settings::layout_key(&desktop::monitors());
-        let size = desktop::window_rect(self.hwnd).map_or([460, 60], |r| [r[2] - r[0], r[3] - r[1]]);
+        let size =
+            desktop::window_rect(self.hwnd).map_or([460, 60], |r| [r[2] - r[0], r[3] - r[1]]);
         let pos = match self.settings.bar_positions.get(&self.layout) {
             Some(&[x, y]) if desktop::on_screen(x + 8, y + 8) => [x, y],
             _ => {
@@ -253,7 +282,9 @@ impl App {
         if self.hwnd == 0 || !desktop::is_visible(self.hwnd) {
             return;
         }
-        let Some(r) = desktop::window_rect(self.hwnd) else { return };
+        let Some(r) = desktop::window_rect(self.hwnd) else {
+            return;
+        };
         let pos = [r[0], r[1]];
         let now = util::now();
         if self.placed != Some(pos) {
@@ -340,12 +371,18 @@ impl eframe::App for App {
         if !self.placed_once {
             self.placed_once = true;
             self.place_bar();
-            self.shared.bar_visible.store(self.settings.bar_visible, Ordering::Relaxed);
+            self.shared
+                .bar_visible
+                .store(self.settings.bar_visible, Ordering::Relaxed);
         }
         self.handle_events(ctx);
         // eframe shows the root after its first frame, so a bar hidden when
         // the app last ran is hidden again here.
-        if self.hwnd != 0 && self.placed.is_some() && desktop::is_visible(self.hwnd) && !self.bar_should_show() {
+        if self.hwnd != 0
+            && self.placed.is_some()
+            && desktop::is_visible(self.hwnd)
+            && !self.bar_should_show()
+        {
             desktop::set_visible(self.hwnd, false);
         }
         // The hotkey outcome arrives from the shell thread after a change.
@@ -360,7 +397,9 @@ impl eframe::App for App {
             // app is dropped and the old one registered again.
             let (tried, result) = shell.hotkey_result();
             let pending = self.hotkey_pending.take();
-            let for_pending = pending.as_deref().is_some_and(|p| settings::parse_hotkey(p) == tried && tried.is_some());
+            let for_pending = pending
+                .as_deref()
+                .is_some_and(|p| settings::parse_hotkey(p) == tried && tried.is_some());
             match (if for_pending { result } else { None }, pending) {
                 (Some(true), Some(new)) => {
                     self.settings.hotkey = new;
@@ -369,7 +408,10 @@ impl eframe::App for App {
                     }
                 }
                 (Some(false), Some(new)) => {
-                    w.status = format!("{new} is in use by another app; kept {}.", self.settings.hotkey);
+                    w.status = format!(
+                        "{new} is in use by another app; kept {}.",
+                        self.settings.hotkey
+                    );
                     w.edit.hotkey = self.settings.hotkey.clone();
                     shell.set_hotkey(settings::parse_hotkey(&self.settings.hotkey));
                 }
@@ -428,7 +470,9 @@ impl eframe::App for App {
                 next = next.min(fmt::next_tick(e, now));
             }
         }
-        let working = rows.iter().any(|r| r.active && r.state == nuff_pulse::model::Display::Working);
+        let working = rows
+            .iter()
+            .any(|r| r.active && r.state == nuff_pulse::model::Display::Working);
         if working {
             // The ring turns at 4 frames a second: enough to read as busy.
             next = next.min(0.25);
@@ -467,7 +511,10 @@ fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: 
     // Turns that finished well before the widget started are not news.
     let now = util::now();
     for r in engine.model.rows(now, util::start_of_today(now)) {
-        if r.alert && r.state == nuff_pulse::model::Display::Done && now - r.state_since > STARTUP_SEEN_DONE {
+        if r.alert
+            && r.state == nuff_pulse::model::Display::Done
+            && now - r.state_since > STARTUP_SEEN_DONE
+        {
             engine.acknowledge(&r.key, now);
         }
     }
@@ -498,8 +545,19 @@ fn worker(ctx: egui::Context, shared: Arc<Shared>, rx: Receiver<Cmd>, settings: 
         }
         engine.poll(now);
         let rows = engine.model.rows(now, util::start_of_today(now));
-        let shown: Vec<_> =
-            rows.iter().map(|r| (r.key.clone(), r.state, r.alert, r.cache_expiring, r.active, r.hidden)).collect();
+        let shown: Vec<_> = rows
+            .iter()
+            .map(|r| {
+                (
+                    r.key.clone(),
+                    r.state,
+                    r.alert,
+                    r.cache_expiring,
+                    r.active,
+                    r.hidden,
+                )
+            })
+            .collect();
         if engine.generation() != generation || shown != last_shown || now - last_publish >= 30.0 {
             generation = engine.generation();
             last_shown = shown;

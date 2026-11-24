@@ -106,7 +106,12 @@ impl CopilotLog {
     /// Cache lifetime of the current model, seconds.
     pub fn cache_ttl(&self) -> Option<f64> {
         let model = self.model.as_deref()?;
-        Some(self.cache_state.get(model).and_then(|e| e.ttl).unwrap_or_else(|| default_ttl(model)))
+        Some(
+            self.cache_state
+                .get(model)
+                .and_then(|e| e.ttl)
+                .unwrap_or_else(|| default_ttl(model)),
+        )
     }
 
     /// Cache expiry of the current model, Unix seconds.
@@ -118,10 +123,8 @@ impl CopilotLog {
             (Some(_), None) => true,
             _ => false,
         };
-        if checkpoint_newer {
-            if let Some(exp) = entry.and_then(|e| e.expires) {
-                return Some(exp);
-            }
+        if checkpoint_newer && let Some(exp) = entry.and_then(|e| e.expires) {
+            return Some(exp);
         }
         // The last request only tells about its own model's cache; after a
         // model switch the new model has no cache yet.
@@ -132,12 +135,16 @@ impl CopilotLog {
             return Some(exp);
         }
         let t = self.last_request_t?;
-        let ttl = entry.and_then(|e| e.ttl).unwrap_or_else(|| default_ttl(model.unwrap_or("")));
+        let ttl = entry
+            .and_then(|e| e.ttl)
+            .unwrap_or_else(|| default_ttl(model.unwrap_or("")));
         Some(t + ttl)
     }
 
     pub fn apply(&mut self, v: &Value) {
-        let Some(kind) = util::s(v, "type") else { return };
+        let Some(kind) = util::s(v, "type") else {
+            return;
+        };
         let data = v.get("data").unwrap_or(&Value::Null);
         let t = util::s(v, "timestamp").and_then(util::parse_iso);
         if let Some(t) = t {
@@ -190,14 +197,12 @@ impl CopilotLog {
                 self.set(t, State::NeedsYou, Some("question"), false);
             }
         }
-        if kind == "tool.execution_complete" {
-            if let Some(id) = util::s(data, "toolCallId") {
-                if self.open_asks.remove(id) {
-                    if let Some(t) = t {
-                        self.unblock(t);
-                    }
-                }
-            }
+        if kind == "tool.execution_complete"
+            && let Some(id) = util::s(data, "toolCallId")
+            && self.open_asks.remove(id)
+            && let Some(t) = t
+        {
+            self.unblock(t);
         }
         if sub {
             return;
@@ -269,7 +274,10 @@ impl CopilotLog {
                 if let Some(m) = util::s(data, "model") {
                     self.model = Some(m.to_string());
                 }
-                let requests = data.get("toolRequests").and_then(Value::as_array).is_some_and(|a| !a.is_empty());
+                let requests = data
+                    .get("toolRequests")
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| !a.is_empty());
                 self.turn_requested_tools = requests;
                 self.turn_has_message = true;
                 if let Some(t) = t {
@@ -288,7 +296,9 @@ impl CopilotLog {
             }
             "tool.execution_start" => {
                 if let Some(id) = util::s(data, "toolCallId") {
-                    let label = util::s(data, "toolTitle").or(util::s(data, "toolName")).unwrap_or("tool");
+                    let label = util::s(data, "toolTitle")
+                        .or(util::s(data, "toolName"))
+                        .unwrap_or("tool");
                     self.open_tools.push((id.to_string(), short(label, 60)));
                 }
                 if let Some(t) = t {
@@ -320,7 +330,8 @@ impl CopilotLog {
                 if let Some(mp) = util::u(usage, "maxPromptTokens") {
                     self.max_prompt_tokens = Some(mp);
                 }
-                self.request_cache_expires = util::s(usage, "cacheExpiresAt").and_then(util::parse_iso);
+                self.request_cache_expires =
+                    util::s(usage, "cacheExpiresAt").and_then(util::parse_iso);
                 if let Some(t) = t {
                     self.last_request_t = Some(t);
                 }
@@ -347,7 +358,13 @@ impl CopilotLog {
                     let reason = util::s(data, "errorType").unwrap_or("error").to_string();
                     let detail = util::s(data, "message").map(|m| short(m, 200));
                     if self.sig.as_ref().is_none_or(|s| t >= s.t) {
-                        self.sig = Some(Sig { t, state: State::Error, reason: Some(reason), detail, provisional: false });
+                        self.sig = Some(Sig {
+                            t,
+                            state: State::Error,
+                            reason: Some(reason),
+                            detail,
+                            provisional: false,
+                        });
                     }
                 }
             }
@@ -361,11 +378,11 @@ impl CopilotLog {
             }
             "session.shutdown" => {
                 self.read_cost(data);
-                if self.context_tokens.is_none() {
-                    if let Some(c) = util::u(data, "currentTokens") {
-                        self.context_tokens = Some(c);
-                        self.context_approx = true;
-                    }
+                if self.context_tokens.is_none()
+                    && let Some(c) = util::u(data, "currentTokens")
+                {
+                    self.context_tokens = Some(c);
+                    self.context_approx = true;
                 }
                 if let Some(m) = util::s(data, "currentModel") {
                     self.model = Some(m.to_string());
@@ -386,7 +403,12 @@ impl CopilotLog {
 
     /// A blocker was answered: back to Working when nothing else waits.
     fn unblock(&mut self, t: f64) {
-        if !self.blocked() && self.sig.as_ref().is_some_and(|s| s.state == State::NeedsYou) {
+        if !self.blocked()
+            && self
+                .sig
+                .as_ref()
+                .is_some_and(|s| s.state == State::NeedsYou)
+        {
             self.set(t, State::Working, None, false);
         }
     }
@@ -402,14 +424,22 @@ impl CopilotLog {
         if self.sig.as_ref().is_some_and(|s| t < s.t) {
             return;
         }
-        self.sig = Some(Sig { t, state, reason: reason.map(str::to_string), detail: None, provisional });
+        self.sig = Some(Sig {
+            t,
+            state,
+            reason: reason.map(str::to_string),
+            detail: None,
+            provisional,
+        });
     }
 }
 
 /// Copilot cache TTL by model family when no checkpoint names it:
 /// Claude 300 s, GPT 1800 s (observed), otherwise 300 s.
 pub fn default_ttl(model: &str) -> f64 {
-    if model.starts_with("gpt") || model.starts_with("o") && model[1..].starts_with(|c: char| c.is_ascii_digit()) {
+    if model.starts_with("gpt")
+        || model.starts_with("o") && model[1..].starts_with(|c: char| c.is_ascii_digit())
+    {
         1800.0
     } else {
         300.0
@@ -436,7 +466,9 @@ impl Workspace {
             if line.starts_with([' ', '\t', '#', '-']) {
                 continue;
             }
-            let Some((key, value)) = line.split_once(':') else { continue };
+            let Some((key, value)) = line.split_once(':') else {
+                continue;
+            };
             let raw = value.trim();
             let value = if raw.starts_with(['|', '>']) {
                 // Block scalar: the indented lines that follow, joined.
@@ -470,7 +502,9 @@ impl Workspace {
 }
 
 fn unquote(v: &str) -> String {
-    if v.len() >= 2 && ((v.starts_with('"') && v.ends_with('"')) || (v.starts_with('\'') && v.ends_with('\''))) {
+    if v.len() >= 2
+        && ((v.starts_with('"') && v.ends_with('"')) || (v.starts_with('\'') && v.ends_with('\'')))
+    {
         let inner = &v[1..v.len() - 1];
         if v.starts_with('\'') {
             inner.replace("''", "'")
@@ -521,12 +555,19 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> (CopilotLog, Workspace) {
-        let dir = format!("{}/tests/fixtures/copilot/{name}", env!("CARGO_MANIFEST_DIR"));
+        let dir = format!(
+            "{}/tests/fixtures/copilot/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        );
         let mut log = CopilotLog::new();
-        for line in std::fs::read_to_string(format!("{dir}/events.jsonl")).unwrap().lines() {
+        for line in std::fs::read_to_string(format!("{dir}/events.jsonl"))
+            .unwrap()
+            .lines()
+        {
             log.apply_line(line);
         }
-        let ws = Workspace::parse(&std::fs::read_to_string(format!("{dir}/workspace.yaml")).unwrap());
+        let ws =
+            Workspace::parse(&std::fs::read_to_string(format!("{dir}/workspace.yaml")).unwrap());
         (log, ws)
     }
 
@@ -536,7 +577,10 @@ mod tests {
         assert_eq!(ws.client_name.as_deref(), Some("vscode-agent-host"));
         assert_eq!(ws.name.as_deref(), Some("Test prompt session"));
         assert!(!ws.user_named);
-        assert_eq!(log.session_id.as_deref(), Some("00000000-0000-4000-8000-000000000002"));
+        assert_eq!(
+            log.session_id.as_deref(),
+            Some("00000000-0000-4000-8000-000000000002")
+        );
         assert_eq!(log.cwd.as_deref(), Some("C:\\work\\project"));
         assert_eq!(log.branch.as_deref(), Some("feature"));
         assert_eq!(log.repository.as_deref(), Some("owner/project"));
@@ -552,7 +596,10 @@ mod tests {
         assert_eq!(ttl, Some(1800.0));
         assert_eq!(log.cache_expires(), log.cache_state["gpt-6.1-sol"].expires);
         assert_eq!(log.sig.as_ref().unwrap().state, State::Ended);
-        assert_eq!(label(ws.client_name.as_deref(), None, false), "Copilot · VS Code");
+        assert_eq!(
+            label(ws.client_name.as_deref(), None, false),
+            "Copilot · VS Code"
+        );
     }
 
     #[test]
@@ -561,7 +608,10 @@ mod tests {
         assert_eq!(ws.client_name.as_deref(), Some("github/cli"));
         assert_eq!(log.model.as_deref(), Some("gemini-4-hydrogen"));
         assert_eq!(log.effort.as_deref(), Some("medium"));
-        assert_eq!(log.first_prompt.as_deref().map(|p| p.starts_with("<str:")), Some(true));
+        assert_eq!(
+            log.first_prompt.as_deref().map(|p| p.starts_with("<str:")),
+            Some(true)
+        );
         assert_eq!(log.sig.as_ref().unwrap().state, State::Ended);
         assert_eq!(label(ws.client_name.as_deref(), None, false), "Copilot CLI");
     }
@@ -572,8 +622,14 @@ mod tests {
         assert!(ws.user_named);
         assert_eq!(ws.name.as_deref(), Some("Copilot 1b verification"));
         assert!(log.context_tokens.unwrap() > 0);
-        let lock = LockProcess { exe: Some("copilot-runtime.exe".into()), parent_exe: Some("GitHub.exe".into()) };
-        assert_eq!(label(ws.client_name.as_deref(), Some(&lock), false), "Copilot app");
+        let lock = LockProcess {
+            exe: Some("copilot-runtime.exe".into()),
+            parent_exe: Some("GitHub.exe".into()),
+        };
+        assert_eq!(
+            label(ws.client_name.as_deref(), Some(&lock), false),
+            "Copilot app"
+        );
         assert_eq!(label(ws.client_name.as_deref(), None, true), "Copilot CLI");
         assert_eq!(label(ws.client_name.as_deref(), None, false), "Copilot");
     }
@@ -581,11 +637,17 @@ mod tests {
     /// Replays the VS Code fixture and records the state after each event.
     #[test]
     fn vscode_state_sequence() {
-        let dir = format!("{}/tests/fixtures/copilot/vscode", env!("CARGO_MANIFEST_DIR"));
+        let dir = format!(
+            "{}/tests/fixtures/copilot/vscode",
+            env!("CARGO_MANIFEST_DIR")
+        );
         let mut log = CopilotLog::new();
         let mut seq: Vec<State> = Vec::new();
         let mut needs_you_reasons = Vec::new();
-        for line in std::fs::read_to_string(format!("{dir}/events.jsonl")).unwrap().lines() {
+        for line in std::fs::read_to_string(format!("{dir}/events.jsonl"))
+            .unwrap()
+            .lines()
+        {
             log.apply_line(line);
             let st = log.sig.as_ref().map(|s| s.state).unwrap_or(State::Idle);
             if seq.last() != Some(&st) {
@@ -613,7 +675,10 @@ mod tests {
                 State::Ended
             ]
         );
-        assert_eq!(needs_you_reasons, vec!["permission_prompt", "permission_prompt", "question"]);
+        assert_eq!(
+            needs_you_reasons,
+            vec!["permission_prompt", "permission_prompt", "question"]
+        );
     }
 
     fn ev(kind: &str, t: &str, data: &str) -> Value {
@@ -624,10 +689,22 @@ mod tests {
     fn provisional_done_is_superseded() {
         let mut log = CopilotLog::new();
         log.apply(&ev("assistant.turn_start", "01", r#"{"turnId":"0"}"#));
-        log.apply(&ev("assistant.message", "02", r#"{"toolRequests":[{"toolCallId":"a","name":"view"}]}"#));
-        log.apply(&ev("tool.execution_start", "03", r#"{"toolCallId":"a","toolName":"view"}"#));
+        log.apply(&ev(
+            "assistant.message",
+            "02",
+            r#"{"toolRequests":[{"toolCallId":"a","name":"view"}]}"#,
+        ));
+        log.apply(&ev(
+            "tool.execution_start",
+            "03",
+            r#"{"toolCallId":"a","toolName":"view"}"#,
+        ));
         assert_eq!(log.activity(), Some("view"));
-        log.apply(&ev("tool.execution_complete", "04", r#"{"toolCallId":"a"}"#));
+        log.apply(&ev(
+            "tool.execution_complete",
+            "04",
+            r#"{"toolCallId":"a"}"#,
+        ));
         log.apply(&ev("assistant.turn_end", "05", r#"{"turnId":"0"}"#));
         // The turn's last message requested tools: not Done.
         assert_eq!(log.sig.as_ref().unwrap().state, State::Working);
@@ -638,7 +715,11 @@ mod tests {
         assert_eq!((s.state, s.provisional), (State::Done, true));
         log.apply(&ev("assistant.turn_start", "09", r#"{"turnId":"2"}"#));
         assert_eq!(log.sig.as_ref().unwrap().state, State::Working);
-        log.apply(&ev("session.error", "10", r#"{"errorType":"query","message":"boom"}"#));
+        log.apply(&ev(
+            "session.error",
+            "10",
+            r#"{"errorType":"query","message":"boom"}"#,
+        ));
         assert_eq!(log.sig.as_ref().unwrap().state, State::Error);
         log.apply(&ev("abort", "11", r#"{"reason":"user_initiated"}"#));
         assert_eq!(log.sig.as_ref().unwrap().state, State::Done);
@@ -669,13 +750,25 @@ mod tests {
         let mut log = CopilotLog::new();
         log.apply(&ev("session.usage_record", "30", r#"{"usage":{"model":"gpt-a","inputTokens":5,"cacheExpiresAt":"2025-11-24T16:30:30Z"}}"#));
         assert!(log.cache_expires().is_some());
-        log.apply(&ev("session.model_change", "40", r#"{"newModel":"claude-b"}"#));
+        log.apply(&ev(
+            "session.model_change",
+            "40",
+            r#"{"newModel":"claude-b"}"#,
+        ));
         assert_eq!(log.cache_expires(), None);
         // A request of unknown model says nothing about a model selected later.
         let mut anon = CopilotLog::new();
-        anon.apply(&ev("session.usage_record", "30", r#"{"usage":{"inputTokens":5,"cacheExpiresAt":"2025-11-24T16:30:30Z"}}"#));
+        anon.apply(&ev(
+            "session.usage_record",
+            "30",
+            r#"{"usage":{"inputTokens":5,"cacheExpiresAt":"2025-11-24T16:30:30Z"}}"#,
+        ));
         assert!(anon.cache_expires().is_some());
-        anon.apply(&ev("session.model_change", "40", r#"{"newModel":"claude-b"}"#));
+        anon.apply(&ev(
+            "session.model_change",
+            "40",
+            r#"{"newModel":"claude-b"}"#,
+        ));
         assert_eq!(anon.cache_expires(), None);
     }
 
@@ -697,7 +790,9 @@ mod tests {
         let w = Workspace::parse("name: 'It''s: here'\nuser_named: true\nclient_name: github\n");
         assert_eq!(w.name.as_deref(), Some("It's: here"));
         assert!(w.user_named);
-        let b = Workspace::parse("name: |-\n  # Review this\n\n  second line\nuser_named: false\nbranch: main\n");
+        let b = Workspace::parse(
+            "name: |-\n  # Review this\n\n  second line\nuser_named: false\nbranch: main\n",
+        );
         assert_eq!(b.name.as_deref(), Some("# Review this second line"));
         assert_eq!(b.branch.as_deref(), Some("main"));
     }

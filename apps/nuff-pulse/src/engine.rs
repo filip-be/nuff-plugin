@@ -4,7 +4,7 @@
 
 use crate::claude::{ClaudeLog, ClaudeStatus};
 use crate::copilot::{CopilotLog, LockProcess, Workspace};
-use crate::model::{Liveness, Model, Origin, Runtime, SessionKey, State, ACTIVE_WINDOW};
+use crate::model::{ACTIVE_WINDOW, Liveness, Model, Origin, Runtime, SessionKey, State};
 use crate::procs::{Hold, Probe, SystemProbe};
 use crate::pulse::{self, HookState};
 use crate::roots::{self, FileRef, Root, RootKind};
@@ -12,7 +12,7 @@ use crate::tailer::{Chunk, Tailer};
 use crate::util;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{Receiver, channel};
 
 pub const SIZE_CHECK_EVERY: f64 = 2.0;
 pub const POLL_EVERY: f64 = 5.0;
@@ -37,7 +37,10 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { watch: true, probe: Box::new(|| Box::new(SystemProbe::new())) }
+        Options {
+            watch: true,
+            probe: Box::new(|| Box::new(SystemProbe::new())),
+        }
     }
 }
 
@@ -145,7 +148,9 @@ impl Engine {
             self.next_rescan = now + RESCAN_EVERY;
         }
         if now >= self.next_poll {
-            let polled: Vec<usize> = (0..self.roots.len()).filter(|&i| self.roots[i].poll).collect();
+            let polled: Vec<usize> = (0..self.roots.len())
+                .filter(|&i| self.roots[i].poll)
+                .collect();
             for i in polled {
                 self.rescan(now, Some(i));
             }
@@ -176,7 +181,11 @@ impl Engine {
         if roots == self.roots {
             return;
         }
-        let map: Vec<Option<usize>> = self.roots.iter().map(|r| roots.iter().position(|n| n == r)).collect();
+        let map: Vec<Option<usize>> = self
+            .roots
+            .iter()
+            .map(|r| roots.iter().position(|n| n == r))
+            .collect();
         let dropped: HashSet<SessionKey> = self
             .files
             .values()
@@ -187,8 +196,11 @@ impl Engine {
         for t in self.files.values_mut() {
             t.root = map[t.root].unwrap_or(t.root);
         }
-        let keep: HashSet<PathBuf> =
-            roots.iter().filter(|r| !r.poll).flat_map(|r| roots::watch_dirs(r).into_iter().map(|(d, _)| d)).collect();
+        let keep: HashSet<PathBuf> = roots
+            .iter()
+            .filter(|r| !r.poll)
+            .flat_map(|r| roots::watch_dirs(r).into_iter().map(|(d, _)| d))
+            .collect();
         if let Some(w) = self.watcher.as_mut() {
             use notify::Watcher;
             for d in self.watched.iter().filter(|d| !keep.contains(*d)) {
@@ -232,7 +244,10 @@ impl Engine {
 
     /// Sessions that have at least one tracked file.
     fn read_keys(&self) -> HashSet<SessionKey> {
-        self.files.values().filter_map(|t| file_key(&t.fref, &self.roots[t.root].origin)).collect()
+        self.files
+            .values()
+            .filter_map(|t| file_key(&t.fref, &self.roots[t.root].origin))
+            .collect()
     }
 
     /// Replaces the context window overrides.
@@ -264,14 +279,20 @@ impl Engine {
     }
 
     fn ensure_watches(&mut self) {
-        let Some(w) = self.watcher.as_mut() else { return };
+        let Some(w) = self.watcher.as_mut() else {
+            return;
+        };
         use notify::{RecursiveMode, Watcher};
         for root in self.roots.iter().filter(|r| !r.poll) {
             for (dir, recursive) in roots::watch_dirs(root) {
                 if self.watched.contains(&dir) || !dir.is_dir() {
                     continue;
                 }
-                let mode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
+                let mode = if recursive {
+                    RecursiveMode::Recursive
+                } else {
+                    RecursiveMode::NonRecursive
+                };
                 if w.watch(&dir, mode).is_ok() {
                     self.watched.insert(dir);
                 }
@@ -333,7 +354,11 @@ impl Engine {
     }
 
     fn key(&self, root: usize, runtime: Runtime, id: &str) -> SessionKey {
-        SessionKey { runtime, origin: self.roots[root].origin.clone(), id: id.to_string() }
+        SessionKey {
+            runtime,
+            origin: self.roots[root].origin.clone(),
+            id: id.to_string(),
+        }
     }
 
     /// Reads a file and applies it to its session.
@@ -411,13 +436,19 @@ impl Engine {
                     None => false,
                 }
             }
-            FileRef::ClaudeStatus(_) => match self.read_whole(root, path, &fref).and_then(|t| ClaudeStatus::parse(&t)) {
+            FileRef::ClaudeStatus(_) => match self
+                .read_whole(root, path, &fref)
+                .and_then(|t| ClaudeStatus::parse(&t))
+            {
                 Some(st) => {
                     let key = self.key(root, Runtime::Claude, &st.session_id);
                     // The same process now runs another session (`/clear`):
                     // its status no longer describes the old one.
                     for (k, other) in self.model.sessions.iter_mut() {
-                        if *k != key && k.origin == key.origin && other.status.as_ref().is_some_and(|o| o.pid == st.pid) {
+                        if *k != key
+                            && k.origin == key.origin
+                            && other.status.as_ref().is_some_and(|o| o.pid == st.pid)
+                        {
                             other.status = None;
                             other.cleared_t = Some(st.status_t.unwrap_or(now));
                             other.note_state();
@@ -447,14 +478,20 @@ impl Engine {
     /// New complete lines of a log file and its modification time, `None`
     /// when nothing new.
     fn tail(&mut self, root: usize, path: &Path, fref: &FileRef) -> Option<(Chunk, f64)> {
-        let t = self.files.entry(path.to_path_buf()).or_insert_with(|| Tracked {
-            root,
-            fref: fref.clone(),
-            tailer: Some(Tailer::with_anchors(path, anchors(fref))),
-            stamp: None,
-        });
+        let t = self
+            .files
+            .entry(path.to_path_buf())
+            .or_insert_with(|| Tracked {
+                root,
+                fref: fref.clone(),
+                tailer: Some(Tailer::with_anchors(path, anchors(fref))),
+                stamp: None,
+            });
         let chunk = t.tailer.as_mut()?.read().ok()?;
-        let mtime = std::fs::metadata(path).and_then(|m| m.modified()).map(util::unix).unwrap_or(0.0);
+        let mtime = std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .map(util::unix)
+            .unwrap_or(0.0);
         (chunk.reset || !chunk.head.is_empty() || !chunk.lines.is_empty()).then_some((chunk, mtime))
     }
 
@@ -463,12 +500,15 @@ impl Engine {
         let meta = std::fs::metadata(path).ok()?;
         let mtime = meta.modified().map(util::unix).unwrap_or(0.0);
         let stamp = (meta.len(), mtime);
-        let t = self.files.entry(path.to_path_buf()).or_insert_with(|| Tracked {
-            root,
-            fref: fref.clone(),
-            tailer: None,
-            stamp: None,
-        });
+        let t = self
+            .files
+            .entry(path.to_path_buf())
+            .or_insert_with(|| Tracked {
+                root,
+                fref: fref.clone(),
+                tailer: None,
+                stamp: None,
+            });
         if t.stamp == Some(stamp) || meta.len() > 1024 * 1024 {
             return None;
         }
@@ -483,17 +523,31 @@ impl Engine {
     /// unknown and fall back to the 2 h activity window.
     pub fn check_liveness(&mut self, now: f64) {
         let probe = (self.opts.probe)();
-        let copilot_roots: Vec<Root> =
-            self.roots.iter().filter(|r| r.kind == RootKind::Copilot && r.origin == Origin::Windows).cloned().collect();
+        let copilot_roots: Vec<Root> = self
+            .roots
+            .iter()
+            .filter(|r| r.kind == RootKind::Copilot && r.origin == Origin::Windows)
+            .cloned()
+            .collect();
         let mut changed = false;
         for (key, s) in self.model.sessions.iter_mut() {
-            if key.origin != Origin::Windows || s.root_gone || now - s.last_activity() > ACTIVE_WINDOW {
+            if key.origin != Origin::Windows
+                || s.root_gone
+                || now - s.last_activity() > ACTIVE_WINDOW
+            {
                 continue;
             }
             let (live, lock_pid, lock) = match key.runtime {
-                Runtime::Claude => (claude_liveness(probe.as_ref(), &s.hooks, s.status.as_ref()), None, None),
+                Runtime::Claude => (
+                    claude_liveness(probe.as_ref(), &s.hooks, s.status.as_ref()),
+                    None,
+                    None,
+                ),
                 Runtime::Copilot => {
-                    let dir = copilot_roots.iter().map(|r| roots::copilot_dir(r, &key.id)).find(|d| d.is_dir());
+                    let dir = copilot_roots
+                        .iter()
+                        .map(|r| roots::copilot_dir(r, &key.id))
+                        .find(|d| d.is_dir());
                     match dir {
                         Some(d) => copilot_liveness(probe.as_ref(), &d),
                         None => (Liveness::Unknown, None, None),
@@ -528,9 +582,14 @@ impl Engine {
                 if pulse::parse_file_name(&entry.file_name().to_string_lossy()).is_none() {
                     continue;
                 }
-                let mtime = entry.metadata().and_then(|m| m.modified()).map(util::unix).unwrap_or(now);
+                let mtime = entry
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .map(util::unix)
+                    .unwrap_or(now);
                 let age = now - mtime;
-                let expired = age > PULSE_STALE_TTL || (age > PULSE_ENDED_TTL && pulse_file_ended(&path));
+                let expired =
+                    age > PULSE_STALE_TTL || (age > PULSE_ENDED_TTL && pulse_file_ended(&path));
                 if expired && std::fs::remove_file(&path).is_ok() {
                     self.files.remove(&path);
                 }
@@ -540,14 +599,22 @@ impl Engine {
         let before = self.model.sessions.len();
         self.model.prune(now, keep_since);
         if self.model.sessions.len() != before {
-            let alive: HashSet<(Runtime, Origin, String)> =
-                self.model.sessions.keys().map(|k| (k.runtime, k.origin.clone(), k.id.clone())).collect();
+            let alive: HashSet<(Runtime, Origin, String)> = self
+                .model
+                .sessions
+                .keys()
+                .map(|k| (k.runtime, k.origin.clone(), k.id.clone()))
+                .collect();
             let roots = &self.roots;
             self.files.retain(|_, t| {
                 let origin = roots[t.root].origin.clone();
                 match &t.fref {
-                    FileRef::ClaudeTranscript(id) => alive.contains(&(Runtime::Claude, origin, id.clone())),
-                    FileRef::CopilotEvents(id) | FileRef::CopilotWorkspace(id) | FileRef::CopilotLock(id) => {
+                    FileRef::ClaudeTranscript(id) => {
+                        alive.contains(&(Runtime::Claude, origin, id.clone()))
+                    }
+                    FileRef::CopilotEvents(id)
+                    | FileRef::CopilotWorkspace(id)
+                    | FileRef::CopilotLock(id) => {
                         alive.contains(&(Runtime::Copilot, origin, id.clone()))
                     }
                     FileRef::Pulse(rt, id) => alive.contains(&(*rt, origin, id.clone())),
@@ -563,11 +630,17 @@ impl Engine {
 fn file_key(fref: &FileRef, origin: &Origin) -> Option<SessionKey> {
     let (runtime, id) = match fref {
         FileRef::ClaudeTranscript(id) => (Runtime::Claude, id),
-        FileRef::CopilotEvents(id) | FileRef::CopilotWorkspace(id) | FileRef::CopilotLock(id) => (Runtime::Copilot, id),
+        FileRef::CopilotEvents(id) | FileRef::CopilotWorkspace(id) | FileRef::CopilotLock(id) => {
+            (Runtime::Copilot, id)
+        }
         FileRef::Pulse(rt, id) => (*rt, id),
         FileRef::ClaudeStatus(_) => return None,
     };
-    Some(SessionKey { runtime, origin: origin.clone(), id: id.clone() })
+    Some(SessionKey {
+        runtime,
+        origin: origin.clone(),
+        id: id.clone(),
+    })
 }
 
 /// Records that carry a log's current state; the first read of a large log
@@ -576,24 +649,36 @@ fn file_key(fref: &FileRef, origin: &Origin) -> Option<SessionKey> {
 fn anchors(fref: &FileRef) -> &'static [&'static str] {
     match fref {
         FileRef::ClaudeTranscript(_) => &["\"type\":\"assistant\""],
-        FileRef::CopilotEvents(_) => {
-            &["\"type\":\"session.usage_record\"", "\"type\":\"session.shutdown\"", "\"type\":\"abort\""]
-        }
+        FileRef::CopilotEvents(_) => &[
+            "\"type\":\"session.usage_record\"",
+            "\"type\":\"session.shutdown\"",
+            "\"type\":\"abort\"",
+        ],
         _ => &[],
     }
 }
 
-pub fn claude_liveness(probe: &dyn Probe, hooks: &HookState, status: Option<&ClaudeStatus>) -> Liveness {
+pub fn claude_liveness(
+    probe: &dyn Probe,
+    hooks: &HookState,
+    status: Option<&ClaudeStatus>,
+) -> Liveness {
     let mut candidates: Vec<(u32, Option<f64>)> = Vec::new();
-    if let Some(h) = hooks.host.as_ref().filter(|h| h.os.as_deref() == Some("windows")) {
-        if let Some(pid) = h.agent_pid {
-            candidates.push((pid, h.agent_started));
-        }
+    if let Some(h) = hooks
+        .host
+        .as_ref()
+        .filter(|h| h.os.as_deref() == Some("windows"))
+        && let Some(pid) = h.agent_pid
+    {
+        candidates.push((pid, h.agent_started));
     }
     if let Some(st) = status {
         candidates.push((st.pid, st.proc_start));
     }
-    let answers: Vec<Option<bool>> = candidates.iter().map(|(p, s)| probe.alive(*p, *s)).collect();
+    let answers: Vec<Option<bool>> = candidates
+        .iter()
+        .map(|(p, s)| probe.alive(*p, *s))
+        .collect();
     if answers.contains(&Some(true)) {
         Liveness::Live
     } else if !answers.is_empty() && answers.iter().all(|a| *a == Some(false)) {
@@ -605,19 +690,29 @@ pub fn claude_liveness(probe: &dyn Probe, hooks: &HookState, status: Option<&Cla
 
 /// Live when an `inuse.<pid>.hold` is held and its pid runs; a missing
 /// `.hold` means ended; an openable leftover means not live.
-pub fn copilot_liveness(probe: &dyn Probe, dir: &Path) -> (Liveness, Option<u32>, Option<LockProcess>) {
+pub fn copilot_liveness(
+    probe: &dyn Probe,
+    dir: &Path,
+) -> (Liveness, Option<u32>, Option<LockProcess>) {
     let mut any_unknown = false;
     let mut any_hold = false;
     for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(pid) = name.ends_with(".hold").then(|| roots::lock_pid(&name)).flatten() else { continue };
+        let Some(pid) = name
+            .ends_with(".hold")
+            .then(|| roots::lock_pid(&name))
+            .flatten()
+        else {
+            continue;
+        };
         any_hold = true;
         match probe.hold(&entry.path()) {
             Hold::Held => match probe.alive(pid, None) {
                 Some(true) => {
-                    let lock = probe
-                        .exe_and_parent(pid)
-                        .map(|(exe, parent)| LockProcess { exe: Some(exe), parent_exe: parent });
+                    let lock = probe.exe_and_parent(pid).map(|(exe, parent)| LockProcess {
+                        exe: Some(exe),
+                        parent_exe: parent,
+                    });
                     return (Liveness::Live, Some(pid), lock);
                 }
                 Some(false) => {}
@@ -637,7 +732,9 @@ pub fn copilot_liveness(probe: &dyn Probe, dir: &Path) -> (Liveness, Option<u32>
 /// True when the last line of a Pulse File says `ended`.
 fn pulse_file_ended(path: &Path) -> bool {
     use std::io::{Read, Seek, SeekFrom};
-    let Ok(mut f) = crate::tailer::open_shared(path) else { return false };
+    let Ok(mut f) = crate::tailer::open_shared(path) else {
+        return false;
+    };
     let len = f.metadata().map(|m| m.len()).unwrap_or(0);
     let start = len.saturating_sub(8192);
     if f.seek(SeekFrom::Start(start)).is_err() {

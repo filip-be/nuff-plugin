@@ -42,15 +42,28 @@ struct Setup {
 
 impl Setup {
     fn new(name: &str) -> Setup {
-        let dir = std::env::temp_dir().join(format!("nuff-pulse-engine-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("nuff-pulse-engine-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        Setup { dir, world: Arc::new(Mutex::new(World::default())) }
+        Setup {
+            dir,
+            world: Arc::new(Mutex::new(World::default())),
+        }
     }
 
     fn roots(&self) -> Vec<Root> {
-        let r = |kind, sub: &str| Root { kind, path: self.dir.join(sub), origin: Origin::Windows, poll: false };
-        vec![r(RootKind::Claude, "claude"), r(RootKind::Copilot, "copilot"), r(RootKind::Pulse, "pulse")]
+        let r = |kind, sub: &str| Root {
+            kind,
+            path: self.dir.join(sub),
+            origin: Origin::Windows,
+            poll: false,
+        };
+        vec![
+            r(RootKind::Claude, "claude"),
+            r(RootKind::Copilot, "copilot"),
+            r(RootKind::Pulse, "pulse"),
+        ]
     }
 
     fn engine(&self) -> Engine {
@@ -75,7 +88,11 @@ impl Drop for Setup {
 
 fn append(p: &Path, s: &str) {
     std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(p).unwrap();
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(p)
+        .unwrap();
     f.write_all(s.as_bytes()).unwrap();
 }
 
@@ -83,14 +100,25 @@ fn copy_copilot_fixture(setup: &Setup, name: &str, id: &str, keep_lines: Option<
     let dir = setup.copilot_dir(id);
     std::fs::create_dir_all(&dir).unwrap();
     let events = std::fs::read_to_string(format!("{FIX}/copilot/{name}/events.jsonl")).unwrap();
-    let kept: Vec<&str> = events.lines().take(keep_lines.unwrap_or(usize::MAX)).collect();
+    let kept: Vec<&str> = events
+        .lines()
+        .take(keep_lines.unwrap_or(usize::MAX))
+        .collect();
     std::fs::write(dir.join("events.jsonl"), kept.join("\n") + "\n").unwrap();
-    std::fs::copy(format!("{FIX}/copilot/{name}/workspace.yaml"), dir.join("workspace.yaml")).unwrap();
+    std::fs::copy(
+        format!("{FIX}/copilot/{name}/workspace.yaml"),
+        dir.join("workspace.yaml"),
+    )
+    .unwrap();
     dir.join("events.jsonl")
 }
 
 fn key(runtime: Runtime, id: &str) -> SessionKey {
-    SessionKey { runtime, origin: Origin::Windows, id: id.into() }
+    SessionKey {
+        runtime,
+        origin: Origin::Windows,
+        id: id.into(),
+    }
 }
 
 #[test]
@@ -99,7 +127,10 @@ fn copilot_session_follows_appends_and_liveness() {
     // Up to (excluding) the ask_user tool start of the VS Code fixture.
     let all = std::fs::read_to_string(format!("{FIX}/copilot/vscode/events.jsonl")).unwrap();
     let lines: Vec<&str> = all.lines().collect();
-    let ask = lines.iter().position(|l| l.contains("\"toolName\":\"ask_user\"") && l.contains("tool.execution_start")).unwrap();
+    let ask = lines
+        .iter()
+        .position(|l| l.contains("\"toolName\":\"ask_user\"") && l.contains("tool.execution_start"))
+        .unwrap();
     let events = copy_copilot_fixture(&setup, "vscode", VSCODE_ID, Some(ask));
     let dir = setup.copilot_dir(VSCODE_ID);
     std::fs::write(dir.join("inuse.4242.lock"), "4242").unwrap();
@@ -129,20 +160,38 @@ fn copilot_session_follows_appends_and_liveness() {
     assert_eq!(row.activity.as_deref(), Some("Asking user"));
 
     // The rest of the session, minus the shutdown: provisional Done.
-    let rest: Vec<&str> = lines[ask + 1..].iter().copied().filter(|l| !l.contains("session.shutdown")).collect();
+    let rest: Vec<&str> = lines[ask + 1..]
+        .iter()
+        .copied()
+        .filter(|l| !l.contains("session.shutdown"))
+        .collect();
     append(&events, &(rest.join("\n") + "\n"));
     // The final turn_end is at 16:01:10.532.
     let t_done = parse_iso("2025-11-24T16:01:12Z").unwrap();
     e.poll(t_done);
     let row = e.model.row(&k, &e.model.sessions[&k], t_done);
-    assert_eq!((row.state, row.alert), (Display::Done, false), "provisional Done waits 3 s");
+    assert_eq!(
+        (row.state, row.alert),
+        (Display::Done, false),
+        "provisional Done waits 3 s"
+    );
     let row = e.model.row(&k, &e.model.sessions[&k], t_done + 2.0);
     assert_eq!((row.state, row.alert), (Display::Done, true));
     assert!(row.cache_level.is_some());
 
     // A hook agentStop line arrives; then the user clicks the row.
-    let pulse = setup.dir.join("pulse/sessions").join(format!("copilot-{VSCODE_ID}.hooks.jsonl"));
-    append(&pulse, &format!(r#"{{"v":1,"t":{},"runtime":"copilot","session_id":"{VSCODE_ID}","event":"agentStop","state":"done","reason":"end_turn"}}{}"#, t_done + 1.0, "\n"));
+    let pulse = setup
+        .dir
+        .join("pulse/sessions")
+        .join(format!("copilot-{VSCODE_ID}.hooks.jsonl"));
+    append(
+        &pulse,
+        &format!(
+            r#"{{"v":1,"t":{},"runtime":"copilot","session_id":"{VSCODE_ID}","event":"agentStop","state":"done","reason":"end_turn"}}{}"#,
+            t_done + 1.0,
+            "\n"
+        ),
+    );
     e.poll(t_done + 61.0); // rescan finds the new Pulse File
     assert!(e.model.sessions[&k].hooks.sig.is_some());
     e.acknowledge(&k, t_done + 62.0);
@@ -162,10 +211,20 @@ fn copilot_session_follows_appends_and_liveness() {
 #[test]
 fn leftover_hold_after_a_hard_kill_is_not_live() {
     let setup = Setup::new("leftover");
-    copy_copilot_fixture(&setup, "cli", "00000000-0000-4000-8000-000000000003", Some(20));
+    copy_copilot_fixture(
+        &setup,
+        "cli",
+        "00000000-0000-4000-8000-000000000003",
+        Some(20),
+    );
     let dir = setup.copilot_dir("00000000-0000-4000-8000-000000000003");
     std::fs::write(dir.join("inuse.77.hold"), "").unwrap();
-    setup.world.lock().unwrap().holds.insert(dir.join("inuse.77.hold"), Hold::Free);
+    setup
+        .world
+        .lock()
+        .unwrap()
+        .holds
+        .insert(dir.join("inuse.77.hold"), Hold::Free);
     let now = parse_iso("2025-11-24T16:00:30Z").unwrap();
     let mut e = setup.engine();
     e.start(now);
@@ -179,15 +238,30 @@ fn leftover_hold_after_a_hard_kill_is_not_live() {
 fn claude_transcript_hooks_and_status() {
     let setup = Setup::new("claude");
     let id = "11111111-2222-3333-4444-555555555555";
-    let transcript = setup.dir.join("claude/projects/C--work-project").join(format!("{id}.jsonl"));
+    let transcript = setup
+        .dir
+        .join("claude/projects/C--work-project")
+        .join(format!("{id}.jsonl"));
     let fixture = std::fs::read_to_string(format!("{FIX}/claude-transcript-01.jsonl")).unwrap();
     append(&transcript, &fixture);
-    let pulse = setup.dir.join("pulse/sessions").join(format!("claude-{id}.hooks.jsonl"));
-    let last = fixture.lines().filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .filter_map(|v| v.get("timestamp").and_then(|t| t.as_str()).and_then(parse_iso))
+    let pulse = setup
+        .dir
+        .join("pulse/sessions")
+        .join(format!("claude-{id}.hooks.jsonl"));
+    let last = fixture
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter_map(|v| {
+            v.get("timestamp")
+                .and_then(|t| t.as_str())
+                .and_then(parse_iso)
+        })
         .fold(0.0, f64::max);
     let line = |t: f64, state: &str, reason: &str| {
-        format!(r#"{{"v":1,"t":{t},"runtime":"claude","session_id":"{id}","event":"x","state":"{state}","reason":"{reason}","detail":"Allow Bash: cargo test","host":{{"os":"windows","agent_pid":900,"agent_started":1.0}}}}{}"#, "\n")
+        format!(
+            r#"{{"v":1,"t":{t},"runtime":"claude","session_id":"{id}","event":"x","state":"{state}","reason":"{reason}","detail":"Allow Bash: cargo test","host":{{"os":"windows","agent_pid":900,"agent_started":1.0}}}}{}"#,
+            "\n"
+        )
     };
     append(&pulse, &line(last + 1.0, "needs_you", "permission_prompt"));
     setup.world.lock().unwrap().alive.insert(900, true);
@@ -206,7 +280,13 @@ fn claude_transcript_hooks_and_status() {
 
     // The user approves: Claude's status file turns busy.
     let status = setup.dir.join("claude/sessions/900.json");
-    append(&status, &format!(r#"{{"pid":900,"sessionId":"{id}","status":"busy","statusUpdatedAt":{}}}"#, ((last + 3.0) * 1000.0) as u64));
+    append(
+        &status,
+        &format!(
+            r#"{{"pid":900,"sessionId":"{id}","status":"busy","statusUpdatedAt":{}}}"#,
+            ((last + 3.0) * 1000.0) as u64
+        ),
+    );
     e.poll(last + 63.0);
     let row = e.model.row(&k, &e.model.sessions[&k], last + 63.0);
     assert_eq!(row.state, Display::Working);
@@ -216,15 +296,36 @@ fn claude_transcript_hooks_and_status() {
     // Same size, and on a coarse clock (Windows) the same mtime as the read
     // above: pin the mtime so every platform sees that stamp.
     let mtime = std::fs::metadata(&status).unwrap().modified().unwrap();
-    std::fs::write(&status, format!(r#"{{"pid":900,"sessionId":"{other}","status":"idle","statusUpdatedAt":{}}}"#, ((last + 4.0) * 1000.0) as u64)).unwrap();
-    std::fs::OpenOptions::new().write(true).open(&status).unwrap().set_modified(mtime).unwrap();
+    std::fs::write(
+        &status,
+        format!(
+            r#"{{"pid":900,"sessionId":"{other}","status":"idle","statusUpdatedAt":{}}}"#,
+            ((last + 4.0) * 1000.0) as u64
+        ),
+    )
+    .unwrap();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&status)
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
     e.poll(last + 130.0); // next rescan re-reads the status file
     assert!(e.model.sessions[&k].status.is_none());
-    assert_eq!(e.model.sessions[&key(Runtime::Claude, other)].status.as_ref().unwrap().pid, 900);
+    assert_eq!(
+        e.model.sessions[&key(Runtime::Claude, other)]
+            .status
+            .as_ref()
+            .unwrap()
+            .pid,
+        900
+    );
     let row = e.model.row(&k, &e.model.sessions[&k], last + 130.0);
-    assert_eq!((row.state, row.alert, row.active), (Display::Ended, false, false));
+    assert_eq!(
+        (row.state, row.alert, row.active),
+        (Display::Ended, false, false)
+    );
     assert_eq!(row.reason.as_deref(), Some("cleared"));
-
 }
 
 #[test]
@@ -233,9 +334,16 @@ fn housekeeping_deletes_old_ended_pulse_files_only() {
     let sessions = setup.dir.join("pulse/sessions");
     let mk = |name: &str, state: &str, age_h: u64| {
         let p = sessions.join(name);
-        append(&p, &format!(r#"{{"v":1,"t":1,"runtime":"claude","session_id":"a","state":"{state}"}}{}"#, "\n"));
+        append(
+            &p,
+            &format!(
+                r#"{{"v":1,"t":1,"runtime":"claude","session_id":"a","state":"{state}"}}{}"#,
+                "\n"
+            ),
+        );
         let f = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
-        f.set_modified(SystemTime::now() - Duration::from_secs(age_h * 3600)).unwrap();
+        f.set_modified(SystemTime::now() - Duration::from_secs(age_h * 3600))
+            .unwrap();
         p
     };
     let old_ended = mk("claude-a.hooks.jsonl", "ended", 25);
@@ -257,19 +365,42 @@ fn claude_liveness_by_agent_pid_or_status_pid() {
     use nuff_pulse::claude::ClaudeStatus;
     use nuff_pulse::engine::claude_liveness;
     use nuff_pulse::model::Liveness;
-    use nuff_pulse::pulse::{parse_line, HookState};
+    use nuff_pulse::pulse::{HookState, parse_line};
     let mut hooks = HookState::default();
     hooks.apply(&parse_line(r#"{"v":1,"t":1,"runtime":"claude","session_id":"a","host":{"os":"windows","agent_pid":900,"agent_started":1.0}}"#).unwrap());
-    let status = ClaudeStatus::parse(r#"{"pid":901,"sessionId":"a","status":"busy","statusUpdatedAt":1000}"#).unwrap();
-    let probe = |alive: &[(u32, bool)]| FakeProbe(World { alive: alive.iter().copied().collect(), holds: HashMap::new() });
-    assert_eq!(claude_liveness(&probe(&[(900, true)]), &hooks, Some(&status)), Liveness::Live);
-    assert_eq!(claude_liveness(&probe(&[(901, true)]), &hooks, Some(&status)), Liveness::Live);
-    assert_eq!(claude_liveness(&probe(&[]), &hooks, Some(&status)), Liveness::NotLive);
-    assert_eq!(claude_liveness(&probe(&[]), &HookState::default(), None), Liveness::Unknown);
+    let status = ClaudeStatus::parse(
+        r#"{"pid":901,"sessionId":"a","status":"busy","statusUpdatedAt":1000}"#,
+    )
+    .unwrap();
+    let probe = |alive: &[(u32, bool)]| {
+        FakeProbe(World {
+            alive: alive.iter().copied().collect(),
+            holds: HashMap::new(),
+        })
+    };
+    assert_eq!(
+        claude_liveness(&probe(&[(900, true)]), &hooks, Some(&status)),
+        Liveness::Live
+    );
+    assert_eq!(
+        claude_liveness(&probe(&[(901, true)]), &hooks, Some(&status)),
+        Liveness::Live
+    );
+    assert_eq!(
+        claude_liveness(&probe(&[]), &hooks, Some(&status)),
+        Liveness::NotLive
+    );
+    assert_eq!(
+        claude_liveness(&probe(&[]), &HookState::default(), None),
+        Liveness::Unknown
+    );
     // Linux pids from WSL hook lines are never looked up among Windows processes.
     let mut wsl = HookState::default();
     wsl.apply(&parse_line(r#"{"v":1,"t":1,"runtime":"claude","session_id":"a","host":{"os":"wsl","agent_pid":900}}"#).unwrap());
-    assert_eq!(claude_liveness(&probe(&[(900, true)]), &wsl, None), Liveness::Unknown);
+    assert_eq!(
+        claude_liveness(&probe(&[(900, true)]), &wsl, None),
+        Liveness::Unknown
+    );
 }
 
 #[test]
@@ -281,13 +412,22 @@ fn roots_change_keeps_offsets_and_ends_stopped_wsl_sessions() {
     let wsl_session = wsl_dir.join("session-state").join("wsl-1");
     std::fs::create_dir_all(&wsl_session).unwrap();
     std::fs::copy(&events, wsl_session.join("events.jsonl")).unwrap();
-    let wsl_root = Root { kind: RootKind::Copilot, path: wsl_dir, origin: Origin::Wsl("Ubuntu".into()), poll: true };
+    let wsl_root = Root {
+        kind: RootKind::Copilot,
+        path: wsl_dir,
+        origin: Origin::Wsl("Ubuntu".into()),
+        poll: true,
+    };
 
     let t = parse_iso("2025-11-24T16:01:00Z").unwrap();
     let mut e = setup.engine();
     e.start(t);
     let windows = key(Runtime::Copilot, VSCODE_ID);
-    let wsl = SessionKey { runtime: Runtime::Copilot, origin: Origin::Wsl("Ubuntu".into()), id: "wsl-1".into() };
+    let wsl = SessionKey {
+        runtime: Runtime::Copilot,
+        origin: Origin::Wsl("Ubuntu".into()),
+        id: "wsl-1".into(),
+    };
     assert!(!e.model.sessions.contains_key(&wsl));
 
     // The distro starts: its root is added and read.
@@ -295,13 +435,24 @@ fn roots_change_keeps_offsets_and_ends_stopped_wsl_sessions() {
     with_wsl.push(wsl_root);
     e.set_roots(with_wsl.clone(), t);
     assert!(e.model.sessions.contains_key(&wsl));
-    let before = e.model.sessions[&windows].copilot.as_ref().unwrap().last_write_t;
+    let before = e.model.sessions[&windows]
+        .copilot
+        .as_ref()
+        .unwrap()
+        .last_write_t;
 
     // It stops: its sessions end; the Windows log is not read again.
     e.set_roots(setup.roots(), t + 1.0);
     let row = e.model.row(&wsl, &e.model.sessions[&wsl], t + 1.0);
     assert_eq!(row.state, Display::Ended);
-    assert_eq!(e.model.sessions[&windows].copilot.as_ref().unwrap().last_write_t, before);
+    assert_eq!(
+        e.model.sessions[&windows]
+            .copilot
+            .as_ref()
+            .unwrap()
+            .last_write_t,
+        before
+    );
     // Only the WSL session was marked not live by the change.
     assert_eq!(e.model.sessions[&wsl].live_t, t + 1.0);
     assert_ne!(e.model.sessions[&windows].live_t, t + 1.0);

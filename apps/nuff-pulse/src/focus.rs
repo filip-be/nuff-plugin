@@ -9,7 +9,15 @@ use crate::procs::ProcInfo;
 use std::collections::HashMap;
 
 /// Processes passed over on the walk up: their windows are never the host.
-pub const SKIP: &[&str] = &["pwsh.exe", "powershell.exe", "cmd.exe", "bash.exe", "wsl.exe", "conhost.exe", "openconsole.exe"];
+pub const SKIP: &[&str] = &[
+    "pwsh.exe",
+    "powershell.exe",
+    "cmd.exe",
+    "bash.exe",
+    "wsl.exe",
+    "conhost.exe",
+    "openconsole.exe",
+];
 
 /// Hosts that may be focused, and whether their window must have the
 /// workspace folder name in its title.
@@ -31,7 +39,10 @@ pub struct Win {
 
 fn host(exe: &str) -> Option<bool> {
     let e = exe.to_ascii_lowercase();
-    HOSTS.iter().find(|(h, _)| *h == e).map(|(_, needs_title)| *needs_title)
+    HOSTS
+        .iter()
+        .find(|(h, _)| *h == e)
+        .map(|(_, needs_title)| *needs_title)
 }
 
 fn title_has(title: &str, folder: &str) -> bool {
@@ -84,7 +95,11 @@ pub fn target(
 
 /// WSL sessions: no Windows pid, so the window of a known host whose title
 /// contains the workspace folder name.
-pub fn target_by_title(procs: &HashMap<u32, ProcInfo>, windows: &[Win], folder: &str) -> Option<isize> {
+pub fn target_by_title(
+    procs: &HashMap<u32, ProcInfo>,
+    windows: &[Win],
+    folder: &str,
+) -> Option<isize> {
     windows
         .iter()
         .filter(|w| procs.get(&w.pid).is_some_and(|p| host(&p.exe).is_some()))
@@ -97,23 +112,30 @@ pub fn target_by_title(procs: &HashMap<u32, ProcInfo>, windows: &[Win], folder: 
 pub fn windows() -> Vec<Win> {
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, GW_OWNER,
+        EnumWindows, GW_OWNER, GetWindow, GetWindowTextLengthW, GetWindowTextW,
+        GetWindowThreadProcessId, IsWindowVisible,
     };
     unsafe extern "system" fn each(hwnd: HWND, lp: LPARAM) -> i32 {
-        let out = &mut *(lp as *mut Vec<Win>);
-        if IsWindowVisible(hwnd) == 0 || !GetWindow(hwnd, GW_OWNER).is_null() {
-            return 1;
+        unsafe {
+            let out = &mut *(lp as *mut Vec<Win>);
+            if IsWindowVisible(hwnd) == 0 || !GetWindow(hwnd, GW_OWNER).is_null() {
+                return 1;
+            }
+            let len = GetWindowTextLengthW(hwnd);
+            if len <= 0 {
+                return 1;
+            }
+            let mut buf = vec![0u16; len as usize + 1];
+            let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            out.push(Win {
+                hwnd: hwnd as isize,
+                pid,
+                title: String::from_utf16_lossy(&buf[..n.max(0) as usize]),
+            });
+            1
         }
-        let len = GetWindowTextLengthW(hwnd);
-        if len <= 0 {
-            return 1;
-        }
-        let mut buf = vec![0u16; len as usize + 1];
-        let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, &mut pid);
-        out.push(Win { hwnd: hwnd as isize, pid, title: String::from_utf16_lossy(&buf[..n.max(0) as usize]) });
-        1
     }
     let mut out: Vec<Win> = Vec::new();
     unsafe { EnumWindows(Some(each), &mut out as *mut Vec<Win> as LPARAM) };
@@ -128,7 +150,9 @@ pub fn windows() -> Vec<Win> {
 /// Restores and activates a window.
 #[cfg(windows)]
 pub fn activate(hwnd: isize) -> bool {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
+    };
     let h = hwnd as windows_sys::Win32::Foundation::HWND;
     unsafe {
         if IsIconic(h) != 0 {
@@ -150,7 +174,14 @@ pub fn focus(pid: Option<u32>, started: Option<f64>, folder: &str) -> bool {
     let procs = crate::procs::snapshot();
     let wins = windows();
     let hwnd = match pid {
-        Some(pid) => target(&procs, &crate::procs::process_created, &wins, pid, started, folder),
+        Some(pid) => target(
+            &procs,
+            &crate::procs::process_created,
+            &wins,
+            pid,
+            started,
+            folder,
+        ),
         None => target_by_title(&procs, &wins, folder),
     };
     hwnd.is_some_and(activate)
@@ -161,11 +192,26 @@ mod tests {
     use super::*;
 
     fn procs(list: &[(u32, u32, &str)]) -> HashMap<u32, ProcInfo> {
-        list.iter().map(|(pid, ppid, exe)| (*pid, ProcInfo { pid: *pid, ppid: *ppid, exe: exe.to_string() })).collect()
+        list.iter()
+            .map(|(pid, ppid, exe)| {
+                (
+                    *pid,
+                    ProcInfo {
+                        pid: *pid,
+                        ppid: *ppid,
+                        exe: exe.to_string(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn win(hwnd: isize, pid: u32, title: &str) -> Win {
-        Win { hwnd, pid, title: title.into() }
+        Win {
+            hwnd,
+            pid,
+            title: title.into(),
+        }
     }
 
     /// Creation time = pid, so parents (lower pids) are older.
@@ -175,7 +221,11 @@ mod tests {
 
     #[test]
     fn terminal_skips_the_shell() {
-        let p = procs(&[(10, 1, "WindowsTerminal.exe"), (20, 10, "pwsh.exe"), (30, 20, "claude.exe")]);
+        let p = procs(&[
+            (10, 1, "WindowsTerminal.exe"),
+            (20, 10, "pwsh.exe"),
+            (30, 20, "claude.exe"),
+        ]);
         let w = [win(1, 20, "PowerShell"), win(2, 10, "Windows PowerShell")];
         assert_eq!(target(&p, &by_pid, &w, 30, None, "shop"), Some(2));
         assert_eq!(target(&p, &by_pid, &w, 30, Some(30.5), "shop"), Some(2));
@@ -185,8 +235,15 @@ mod tests {
 
     #[test]
     fn vscode_needs_the_workspace_title() {
-        let p = procs(&[(10, 1, "Code.exe"), (20, 10, "Code.exe"), (30, 20, "claude.exe")]);
-        let w = [win(1, 10, "other - Visual Studio Code"), win(2, 10, "main.rs - shop - Visual Studio Code")];
+        let p = procs(&[
+            (10, 1, "Code.exe"),
+            (20, 10, "Code.exe"),
+            (30, 20, "claude.exe"),
+        ]);
+        let w = [
+            win(1, 10, "other - Visual Studio Code"),
+            win(2, 10, "main.rs - shop - Visual Studio Code"),
+        ];
         assert_eq!(target(&p, &by_pid, &w, 30, None, "Shop"), Some(2));
         assert_eq!(target(&p, &by_pid, &w, 30, None, "nope"), None);
     }
@@ -194,9 +251,16 @@ mod tests {
     #[test]
     fn copilot_app_and_unknown_hosts() {
         let p = procs(&[(10, 1, "GitHub.exe"), (20, 10, "copilot-runtime.exe")]);
-        assert_eq!(target(&p, &by_pid, &[win(5, 10, "GitHub")], 20, None, ""), Some(5));
+        assert_eq!(
+            target(&p, &by_pid, &[win(5, 10, "GitHub")], 20, None, ""),
+            Some(5)
+        );
         // An unknown visible window stops the walk: focus nothing.
-        let p = procs(&[(10, 1, "WindowsTerminal.exe"), (15, 10, "notepad.exe"), (20, 15, "copilot.exe")]);
+        let p = procs(&[
+            (10, 1, "WindowsTerminal.exe"),
+            (15, 10, "notepad.exe"),
+            (20, 15, "copilot.exe"),
+        ]);
         let w = [win(1, 15, "Notepad"), win(2, 10, "Terminal")];
         assert_eq!(target(&p, &by_pid, &w, 20, None, ""), None);
     }
