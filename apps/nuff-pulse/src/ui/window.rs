@@ -66,6 +66,7 @@ pub fn show(ui: &mut Ui, shared: &Shared, win: &Mutex<WinState>) {
         shared.app_open.store(false, Ordering::Relaxed);
         return;
     }
+    super::zoom_input(&ctx);
     let rows = shared.rows();
     let now = util::now();
     egui::Panel::top("tabs").show(ui, |ui| {

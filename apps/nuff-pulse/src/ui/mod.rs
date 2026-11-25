@@ -91,6 +91,38 @@ pub fn open_row(shared: &Shared, r: &Row) {
     }
 }
 
+/// Ctrl+mouse wheel (or a pinch) over a window zooms the bar and the app
+/// window together: 10 % per wheel notch, within the settings' limits.
+pub fn zoom_input(ctx: &egui::Context) {
+    let mut z = ctx.zoom_factor();
+    let before = z;
+    ctx.input(|i| {
+        for e in &i.events {
+            match e {
+                egui::Event::MouseWheel {
+                    unit,
+                    delta,
+                    modifiers,
+                    ..
+                } if modifiers.command => {
+                    let notches = match unit {
+                        egui::MouseWheelUnit::Line => delta.y,
+                        egui::MouseWheelUnit::Point => delta.y / 50.0,
+                        egui::MouseWheelUnit::Page => delta.y * 3.0,
+                    };
+                    z += 0.1 * notches;
+                }
+                egui::Event::Zoom(f) => z *= f,
+                _ => {}
+            }
+        }
+    });
+    let z = z.clamp(settings::ZOOM_MIN, settings::ZOOM_MAX);
+    if z != before {
+        ctx.set_zoom_factor(z);
+    }
+}
+
 /// Windows sessions with an agent pid, or WSL sessions (by title); never an
 /// ended session, whose window is gone or belongs to something else now.
 pub fn can_focus(r: &Row) -> bool {
@@ -144,7 +176,13 @@ struct App {
     /// registration succeeded.
     hotkey_pending: Option<String>,
     save_position_at: Option<f64>,
+    /// Zoom last seen, and when to save it (a wheel turn changes it often).
+    zoom_seen: f32,
+    save_zoom_at: Option<f64>,
+    /// While a zoom resizes the bar: the right edge to keep and until when.
+    keep_right: Option<(i32, f64)>,
     placed_once: bool,
+    /// Bar size last asked for, in points times zoom.
     last_size: egui::Vec2,
     win: Arc<Mutex<window::WinState>>,
 }
@@ -160,6 +198,7 @@ impl App {
             desktop::round_corners(hwnd);
         }
         let ctx = cc.egui_ctx.clone();
+        ctx.set_zoom_factor(settings.zoom);
         let (tx, rx) = channel();
         let shared = Arc::new(Shared {
             data: Mutex::new(Published::default()),
@@ -205,6 +244,9 @@ impl App {
             placed: None,
             hotkey_pending: None,
             save_position_at: None,
+            zoom_seen: ctx.zoom_factor(),
+            save_zoom_at: None,
+            keep_right: None,
             placed_once: false,
             last_size: egui::Vec2::ZERO,
             win,
@@ -282,11 +324,20 @@ impl App {
         if self.hwnd == 0 || !desktop::is_visible(self.hwnd) {
             return;
         }
-        let Some(r) = desktop::window_rect(self.hwnd) else {
+        let Some(mut r) = desktop::window_rect(self.hwnd) else {
             return;
         };
-        let pos = [r[0], r[1]];
         let now = util::now();
+        match self.keep_right {
+            Some((_, until)) if now > until => self.keep_right = None,
+            Some((right, _)) if r[2] != right => {
+                let w = r[2] - r[0];
+                desktop::move_window(self.hwnd, right - w, r[1]);
+                r = [right - w, r[1], right, r[3]];
+            }
+            _ => {}
+        }
+        let pos = [r[0], r[1]];
         if self.placed != Some(pos) {
             self.placed = Some(pos);
             self.save_position_at = Some(now + 1.0);
@@ -294,6 +345,39 @@ impl App {
         } else if self.save_position_at.is_some_and(|t| now >= t) {
             self.save_position_at = None;
             self.settings.bar_positions.insert(self.layout.clone(), pos);
+            self.save_settings();
+        }
+    }
+
+    /// Follows the zoom (wheel or egui's Ctrl+plus/minus keys): keeps it
+    /// within limits, keeps a bar in the right half of its monitor growing
+    /// leftwards, and saves the zoom once it has rested for a second.
+    fn track_zoom(&mut self, ctx: &egui::Context) {
+        let z = ctx.zoom_factor();
+        let clamped = z.clamp(settings::ZOOM_MIN, settings::ZOOM_MAX);
+        if clamped != z {
+            ctx.set_zoom_factor(clamped);
+        }
+        let now = util::now();
+        if (clamped - self.zoom_seen).abs() > 1e-4 {
+            self.zoom_seen = clamped;
+            self.save_zoom_at = Some(now + 1.0);
+            ctx.request_repaint_after(Duration::from_millis(1100));
+            if let Some(r) = (self.hwnd != 0)
+                .then(|| desktop::window_rect(self.hwnd))
+                .flatten()
+            {
+                let right_half = desktop::monitors().iter().any(|m| {
+                    (m[0]..m[2]).contains(&r[0])
+                        && (m[1]..m[3]).contains(&r[1])
+                        && r[0] + r[2] > m[0] + m[2]
+                });
+                let right = self.keep_right.map_or(r[2], |(right, _)| right);
+                self.keep_right = right_half.then_some((right, now + 1.5));
+            }
+        } else if self.save_zoom_at.is_some_and(|t| now >= t) {
+            self.save_zoom_at = None;
+            self.settings.zoom = settings::clamp_zoom(clamped);
             self.save_settings();
         }
     }
@@ -344,6 +428,7 @@ impl App {
             s.bar_positions = self.settings.bar_positions.clone();
             s.bar_mode = self.settings.bar_mode;
             s.bar_visible = self.settings.bar_visible;
+            s.zoom = self.settings.zoom;
             let candidate = s.hotkey.clone();
             let hotkey_changed = candidate != self.settings.hotkey;
             // The file keeps the working hotkey until the new one registers.
@@ -376,6 +461,7 @@ impl eframe::App for App {
                 .store(self.settings.bar_visible, Ordering::Relaxed);
         }
         self.handle_events(ctx);
+        self.track_zoom(ctx);
         // eframe shows the root after its first frame, so a bar hidden when
         // the app last ran is hidden again here.
         if self.hwnd != 0
@@ -430,6 +516,7 @@ impl eframe::App for App {
             self.save_settings();
             self.apply_bar_visibility();
         }
+        zoom_input(&ctx);
         self.track_position(&ctx);
 
         // The app window: always registered, hidden until opened.
@@ -459,8 +546,10 @@ impl eframe::App for App {
         if out.open_app {
             self.open_app(&ctx, false);
         }
-        if (out.size - self.last_size).length() > 0.5 {
-            self.last_size = out.size;
+        // Compared zoomed: a zoom keeps the size in points but not on screen.
+        let zoomed = out.size * ctx.zoom_factor();
+        if (zoomed - self.last_size).length() > 0.5 {
+            self.last_size = zoomed;
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(out.size));
         }
         // Countdowns change once a minute; the ring turns while working.
@@ -482,6 +571,9 @@ impl eframe::App for App {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.shared.send(Cmd::Quit);
+        if self.save_zoom_at.is_some() {
+            self.settings.zoom = settings::clamp_zoom(self.zoom_seen);
+        }
         if let Some(shell) = self.shared.shell.lock().unwrap().take() {
             shell.close();
         }

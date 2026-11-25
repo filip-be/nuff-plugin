@@ -1,5 +1,5 @@
 //! `%APPDATA%\nuff-pulse\settings.toml`: bar position per monitor layout,
-//! hotkey, extra roots and context window overrides. Unknown or broken
+//! hotkey, zoom, extra roots and context window overrides. Unknown or broken
 //! values fall back to defaults; the file is only written by the app.
 
 use crate::model::{Config, Origin};
@@ -9,6 +9,17 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_HOTKEY: &str = "Win+Alt+P";
+/// Zoom limits: text and windows from half to three times their size.
+pub const ZOOM_MIN: f32 = 0.5;
+pub const ZOOM_MAX: f32 = 3.0;
+
+/// A zoom within the limits, rounded to whole percents; 1 when not a number.
+pub fn clamp_zoom(z: f32) -> f32 {
+    if !z.is_finite() {
+        return 1.0;
+    }
+    (z.clamp(ZOOM_MIN, ZOOM_MAX) * 100.0).round() / 100.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,6 +45,8 @@ pub struct Settings {
     pub hotkey: String,
     pub bar_visible: bool,
     pub bar_mode: BarMode,
+    /// Size of text and windows (1 = 100 %); Ctrl+mouse wheel changes it.
+    pub zoom: f32,
     /// Monitor layout key → bar position (physical pixels, top-left).
     pub bar_positions: BTreeMap<String, [i32; 2]>,
     pub extra_roots: Vec<ExtraRoot>,
@@ -50,6 +63,7 @@ impl Default for Settings {
             hotkey: DEFAULT_HOTKEY.into(),
             bar_visible: true,
             bar_mode: BarMode::List,
+            zoom: 1.0,
             bar_positions: BTreeMap::new(),
             extra_roots: Vec::new(),
             context_windows: BTreeMap::new(),
@@ -60,11 +74,13 @@ impl Default for Settings {
 
 impl Settings {
     pub fn parse(text: &str) -> Settings {
-        toml::from_str(text).unwrap_or_default()
+        Settings::try_parse(text).unwrap_or_default()
     }
 
     pub fn try_parse(text: &str) -> Result<Settings, String> {
-        toml::from_str(text).map_err(|e| e.to_string())
+        let mut s: Settings = toml::from_str(text).map_err(|e| e.to_string())?;
+        s.zoom = clamp_zoom(s.zoom);
+        Ok(s)
     }
 
     pub fn to_toml(&self) -> String {
@@ -266,6 +282,16 @@ mod tests {
             (BarMode::Pill, DEFAULT_HOTKEY, true)
         );
         assert_eq!(Settings::parse("hotkey = [").hotkey, DEFAULT_HOTKEY);
+        assert_eq!(p.zoom, 1.0);
+    }
+
+    #[test]
+    fn zoom_is_clamped() {
+        assert_eq!(Settings::parse("zoom = 1.25").zoom, 1.25);
+        assert_eq!(Settings::parse("zoom = 9.0").zoom, ZOOM_MAX);
+        assert_eq!(Settings::parse("zoom = 0.1").zoom, ZOOM_MIN);
+        assert_eq!(Settings::parse("zoom = nan").zoom, 1.0);
+        assert_eq!(clamp_zoom(1.234_567), 1.23);
     }
 
     #[test]

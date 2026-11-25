@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Zoom: Ctrl+mouse wheel over the bar or the app window makes text and windows bigger or smaller (50–300 %, remembered as `zoom` in the settings file); a bar in the right half of its monitor grows to the left.
+
 ## 1.0.0
 
 - Core (no UI yet): reads Claude Code transcripts and `~/.claude/sessions/<pid>.json`, GitHub Copilot `session-state` (`events.jsonl`, `workspace.yaml`, `inuse.<pid>.hold`) and nuff-pulse hook files; reduces them to one row per session with state, title, workspace, activity, subagents, context, cache countdown, model and cost.
