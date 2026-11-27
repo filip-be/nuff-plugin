@@ -10,7 +10,7 @@ WORKSPACE = "D:\\work\\proj"
 NO_HOME = "C:\\nuff-hooks-test-home"  # has no .nuff-hooks.json, so the user's real one can't change the results
 POSIX_WORKSPACE = "/nuff-hooks-test/work/proj"
 POSIX_NO_HOME = "/nuff-hooks-test/home"
-LOCAL = {"CLAUDE_CODE_REMOTE": ""}  # a local session, even when the tests run in a Claude Code cloud session
+LOCAL = {"CLAUDE_CODE_REMOTE": "", "CLAUDE_CODE_REMOTE_SESSION_ID": "", "CLAUDE_CODE_CONTAINER_ID": ""}  # a local session, even when the tests run in a Claude Code cloud session
 
 
 def load(path: Path):

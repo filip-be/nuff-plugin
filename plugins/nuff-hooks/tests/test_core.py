@@ -562,6 +562,15 @@ class CloudSession(PosixCase):
         self.assertEqual(core.check_read("/etc/passwd", context).kind, "deny")
         self.assertEqual(core.check_write("/mnt/user-data/x", context).kind, "deny")
 
+    def test_detected_by_session_or_container_id(self):
+        for name in ("CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_CONTAINER_ID"):
+            with self.subTest(name=name):
+                env = {"HOME": "/root", name: "x1", "CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data"}
+                context = posix_ctx(workspace="/home/claude", env=env)
+                self.assertEqual(core.check_read("/mnt/user-data/uploads/deck.pptx", context).kind, "allow")
+                self.assertEqual(core.check_shell("ls ~", "bash", context).kind, "allow")
+                self.assertEqual(core.check_write("/mnt/user-data/outputs/deck.pptx", context).kind, "allow")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,7 @@ TRASH = None  # overrides the platform's Trash folder when set
 AGENT_DIRS = (".claude", ".claude.json", ".copilot")  # relative to the user's home
 CONFIG_FILE = ".nuff-hooks.json"  # relative to the user's home; outside the Write Zone on purpose
 CLOUD_FLAG = "CLAUDE_CODE_REMOTE"  # "true" in Claude Code cloud sessions (claude.ai/code, web chats)
+CLOUD_IDS = ("CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_CONTAINER_ID")  # also only set in cloud sessions
 CLOUD_EXTRA_DIRS = "CLAUDE_ADDITIONAL_DIRECTORIES"  # extra directories of a cloud session, e.g. /mnt/user-data
 
 PREFIX = "nuff-hooks: "
@@ -83,7 +84,9 @@ def trash_dir(ctx: Context) -> str:
 
 def is_cloud(ctx: Context) -> bool:
     """A Claude Code cloud session: a sandboxed, throwaway container, so the Read Zone is everywhere."""
-    return (_env(ctx, CLOUD_FLAG) or "").strip().lower() in ("true", "1")
+    if (_env(ctx, CLOUD_FLAG) or "").strip().lower() in ("true", "1"):
+        return True
+    return any((_env(ctx, name) or "").strip() for name in CLOUD_IDS)
 
 
 def cloud_dirs(ctx: Context) -> list[str]:
