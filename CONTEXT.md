@@ -111,3 +111,27 @@ _Avoid_: delete, cleanup
 **Rewrite**:
 Replacing a Removal, before it runs, with a move of the same targets into Trash.
 _Avoid_: redirect, intercept
+
+## Dumb swimmer
+
+A nuff-cc mod that keeps the agent aware of its context size and gets it to hand off before its work degrades.
+
+**Context size**:
+The input tokens the main conversation's next request re-sends; subagents' contexts are not counted.
+_Avoid_: tokens, usage
+
+**Drift zone**:
+The context size at which the agent is heading toward the Dumb zone: it should steer toward a stopping point and not start large new work.
+_Avoid_: warning zone, shallows
+
+**Dumb zone**:
+The context size past which the agent's work is assumed to degrade: it should stop at the next safe point and write a Handoff.
+_Avoid_: danger zone, limit
+
+**Nudge**:
+A note the mod attaches for the model, never shown to the user, telling it which zone it is in and what to do. Nudges never block anything.
+_Avoid_: warning, alert
+
+**Handoff**:
+What the agent leaves before stopping in the Dumb zone so a cleared session can carry on: a Handoff section at the top of the plan file it works from (what's done, what's left, the next step), or else a self-contained prompt for the user to paste. It ends by offering the user `/clear`.
+_Avoid_: summary, hand-over notes
