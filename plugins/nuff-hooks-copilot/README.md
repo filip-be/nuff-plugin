@@ -13,7 +13,6 @@ Good enough guardrail hooks for **GitHub Copilot CLI only**: they use the Copilo
 - **Trash** — the folder where removed files are kept instead of being deleted: `D:\.slop-trash` on Windows, `~/.slop-trash` on Linux and macOS.
 - **Removal** — a shell delete command (`rm`, `rmdir`, `unlink`, `shred`, `del`, `erase`, `rd`, `Remove-Item` and its aliases) aimed at files or directories. Git commands and overwriting moves are not Removals.
 - **Rewrite** — replacing a Removal, before it runs, with a move of the same targets into Trash.
-- **Cloud Session** — a Claude Code session in a sandboxed cloud container (`CLAUDE_CODE_REMOTE=true`). The checks in this plugin also serve Claude Code and relax the Read Zone there, but Copilot CLI never sets that variable, so it changes nothing here.
 
 ## What it does
 

@@ -520,56 +520,48 @@ class PosixReadRoots(PosixCase):
                 self.assertIn("not an absolute path like /opt/src", decision.reason)
 
 
-class CloudSession(PosixCase):
-    """Claude Code cloud sessions (CLAUDE_CODE_REMOTE=true): read anywhere, write zone plus extra dirs."""
+class ReadAnywhere(PosixCase):
+    """Adapter switches for sandboxed sessions: reads not checked, extra Write Zone roots."""
 
-    def cloud_ctx(self, **extra):
-        env = {"HOME": "/root", "TMPDIR": POSIX_TMPDIR, "CLAUDE_CODE_REMOTE": "true", **extra}
-        return posix_ctx(workspace="/home/user/proj", env=env)
+    def sandboxed(self, **fields):
+        context = posix_ctx(workspace="/home/user/proj", env={"HOME": "/root", "TMPDIR": POSIX_TMPDIR})
+        context.read_anywhere = True
+        context.extra_write_roots = ("/mnt/user-data",)
+        for name, value in fields.items():
+            setattr(context, name, value)
+        return context
 
     def test_reads_anywhere(self):
         for path in ("/etc/passwd", "/usr/include/stdio.h", "/home/user/other/x", "/root/.ccr/README.md"):
             with self.subTest(path=path):
-                self.assertEqual(core.check_read(path, self.cloud_ctx()).kind, "allow")
-        for command in ("cat /etc/hosts", "grep -r x /opt", "head $UNKNOWN/x", "cat < /etc/hosts"):
+                self.assertEqual(core.check_read(path, self.sandboxed()).kind, "allow")
+        for command in ("cat /etc/hosts", "grep -r x /opt", "head $UNKNOWN/x", "cat < /etc/hosts", "ls ~"):
             with self.subTest(command=command):
-                self.assertEqual(core.check_shell(command, "bash", self.cloud_ctx()).kind, "allow")
+                self.assertEqual(core.check_shell(command, "bash", self.sandboxed()).kind, "allow")
 
     def test_writes_still_guarded(self):
-        context = self.cloud_ctx(CLAUDE_ADDITIONAL_DIRECTORIES="/mnt/user-data:relative")
         cases = {
             "/home/user/proj/a.py": "allow",
             "/mnt/user-data/outputs/report.md": "allow",
             "/root/.slop-trash/x": "allow",
             "/etc/hosts": "deny",
             "/home/user/other/a.py": "deny",
-            "relative/x": "allow",  # inside the Workspace, not the ignored relative entry
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
-                self.assertEqual(core.check_write(path, context).kind, expected)
-        decision = core.check_shell("cp /etc/hosts /usr/x", "bash", context)
+                self.assertEqual(core.check_write(path, self.sandboxed()).kind, expected)
+        decision = core.check_shell("cp /etc/hosts /usr/x", "bash", self.sandboxed())
         self.assertEqual(decision.kind, "deny")
         self.assertIn("/mnt/user-data", decision.reason)
 
-    def test_removals_still_rewritten(self):
-        self.assertEqual(core.check_shell("rm -rf build", "bash", self.cloud_ctx()).kind, "rewrite")
-        self.assertEqual(core.check_shell("eval x", "bash", self.cloud_ctx()).kind, "deny")
+    def test_removals_and_evasion_still_checked(self):
+        self.assertEqual(core.check_shell("rm -rf build", "bash", self.sandboxed()).kind, "rewrite")
+        self.assertEqual(core.check_shell("eval x", "bash", self.sandboxed()).kind, "deny")
 
-    def test_extra_dirs_need_cloud_flag(self):
-        env = {"HOME": POSIX_HOME, "CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data", "CLAUDE_CODE_REMOTE": "false"}
-        context = posix_ctx(env=env)
+    def test_off_by_default(self):
+        context = posix_ctx()
         self.assertEqual(core.check_read("/etc/passwd", context).kind, "deny")
         self.assertEqual(core.check_write("/mnt/user-data/x", context).kind, "deny")
-
-    def test_detected_by_session_or_container_id(self):
-        for name in ("CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_CONTAINER_ID"):
-            with self.subTest(name=name):
-                env = {"HOME": "/root", name: "x1", "CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data"}
-                context = posix_ctx(workspace="/home/claude", env=env)
-                self.assertEqual(core.check_read("/mnt/user-data/uploads/deck.pptx", context).kind, "allow")
-                self.assertEqual(core.check_shell("ls ~", "bash", context).kind, "allow")
-                self.assertEqual(core.check_write("/mnt/user-data/outputs/deck.pptx", context).kind, "allow")
 
 
 if __name__ == "__main__":

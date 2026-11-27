@@ -2,7 +2,7 @@
 
 This file ships unchanged in plugins/nuff-hooks-cc/hooks and plugins/nuff-hooks-copilot/hooks.
 Every copy must stay byte-identical with plugins/nuff-hooks/core (tests/test_sync.py checks it).
-Terms (Workspace, Read Roots, Read Zone, Write Zone, Trash, Removal, Rewrite, Cloud Session) are defined
+Terms (Workspace, Read Roots, Read Zone, Write Zone, Trash, Removal, Rewrite) are defined
 in the README.md of the plugin this file ships in.
 
 Only the Python standard library is used: the hooks start on every tool call.
@@ -29,9 +29,6 @@ POSIX_TEMP = ("/tmp", "/private/tmp")  # always Temp on POSIX: macOS points TMPD
 TRASH = None  # overrides the platform's Trash folder when set
 AGENT_DIRS = (".claude", ".claude.json", ".copilot")  # relative to the user's home
 CONFIG_FILE = ".nuff-hooks.json"  # relative to the user's home; outside the Write Zone on purpose
-CLOUD_FLAG = "CLAUDE_CODE_REMOTE"  # "true" in Claude Code cloud sessions (claude.ai/code, web chats)
-CLOUD_IDS = ("CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_CONTAINER_ID")  # also only set in cloud sessions
-CLOUD_EXTRA_DIRS = "CLAUDE_ADDITIONAL_DIRECTORIES"  # extra directories of a cloud session, e.g. /mnt/user-data
 
 PREFIX = "nuff-hooks: "
 
@@ -46,6 +43,8 @@ class Context:
     env: dict = field(default_factory=lambda: dict(os.environ))
     loop_vars: dict = field(default_factory=dict)  # bash `for NAME in WORDS`: NAME -> WORDS
     read_roots: tuple | None = None  # (configured Read Roots, config error), loaded once by read_roots()
+    read_anywhere: bool = False  # set by an adapter whose sessions are sandboxed: reads are not checked
+    extra_write_roots: tuple = ()  # absolute directories an adapter adds to the Write Zone
 
 
 @dataclass
@@ -82,24 +81,8 @@ def trash_dir(ctx: Context) -> str:
     return WINDOWS_TRASH if WINDOWS else posixpath.join(_home(ctx), POSIX_TRASH)
 
 
-def is_cloud(ctx: Context) -> bool:
-    """A Claude Code cloud session: a sandboxed, throwaway container, so the Read Zone is everywhere."""
-    if (_env(ctx, CLOUD_FLAG) or "").strip().lower() in ("true", "1"):
-        return True
-    return any((_env(ctx, name) or "").strip() for name in CLOUD_IDS)
-
-
-def cloud_dirs(ctx: Context) -> list[str]:
-    """Extra directories of a cloud session (e.g. a web chat's /mnt/user-data); they join the Write Zone."""
-    if not is_cloud(ctx):
-        return []
-    entries = re.split(r"[\n" + re.escape(os.pathsep) + "]", _env(ctx, CLOUD_EXTRA_DIRS) or "")
-    absolute = (lambda d: re.match(r"^[A-Za-z]:[\\/]", d)) if WINDOWS else (lambda d: d.startswith("/"))
-    return [entry.strip() for entry in entries if entry.strip() and absolute(entry.strip())]
-
-
 def _write_zone_text(ctx: Context) -> str:
-    extra = "".join(f"{d}, " for d in cloud_dirs(ctx))
+    extra = "".join(f"{d}, " for d in ctx.extra_write_roots)
     return f"the Write Zone is the Workspace, {extra}{trash_dir(ctx)}, the agent's home dirs and the temp dir"
 
 
@@ -287,14 +270,14 @@ def _read_zone_text(ctx: Context) -> str:
 
 
 def in_read_zone(path: str, ctx: Context) -> bool:
-    if is_cloud(ctx):
+    if ctx.read_anywhere:
         return True
     roots = (ctx.workspace, *default_read_roots(), *read_roots(ctx), *_agent_and_temp(ctx))
     return any(_under(path, root) for root in roots)
 
 
 def in_write_zone(path: str, ctx: Context) -> bool:
-    roots = (ctx.workspace, *cloud_dirs(ctx), trash_dir(ctx), *_agent_and_temp(ctx))
+    roots = (ctx.workspace, *ctx.extra_write_roots, trash_dir(ctx), *_agent_and_temp(ctx))
     return any(_under(path, root) for root in roots)
 
 
@@ -303,7 +286,7 @@ def in_trash(path: str, ctx: Context) -> bool:
 
 
 def _require_read(token: str, ctx: Context, cwd: str, shell: str) -> None:
-    if is_cloud(ctx):
+    if ctx.read_anywhere:
         return  # any read is fine, even of a path the hook can't resolve
     for path in resolve_all(token, ctx, cwd, shell):
         if path is not None and not in_read_zone(path, ctx):

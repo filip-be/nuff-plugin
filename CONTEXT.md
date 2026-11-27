@@ -95,14 +95,14 @@ Extra directories the user lets agents read, listed under `readRoots` in `~/.nuf
 _Avoid_: allowlist, read paths
 
 **Cloud Session**:
-A Claude Code session running in a sandboxed, throwaway cloud container (Claude Code on the web, claude.ai chats that run code), marked by `CLAUDE_CODE_REMOTE=true`. Its extra directories (`CLAUDE_ADDITIONAL_DIRECTORIES`, e.g. `/mnt/user-data`) are its **Cloud Dirs**.
+A Claude Code session (nuff-hooks-cc only; Copilot cloud sessions are not treated this way) running in a sandboxed, throwaway cloud container (Claude Code on the web, claude.ai chats that run code), marked by `CLAUDE_CODE_REMOTE=true`. Its extra directories (`CLAUDE_ADDITIONAL_DIRECTORIES`, e.g. `/mnt/user-data`) are its **Cloud Dirs**.
 _Avoid_: remote session, web session
 
 **Read Zone**:
-Everywhere an agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp. In a Cloud Session: everywhere.
+Everywhere an agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp. In a Claude Code Cloud Session: everywhere.
 
 **Write Zone**:
-Everywhere an agent may write: the Workspace, Trash, Agent Dirs and Temp, plus the Cloud Dirs in a Cloud Session.
+Everywhere an agent may write: the Workspace, Trash, Agent Dirs and Temp, plus the Cloud Dirs in a Claude Code Cloud Session.
 
 **Removal**:
 A shell delete command (`rm`, `rmdir`, `unlink`, `del`, `erase`, `rd`, `Remove-Item` and its aliases) aimed at files or directories. Git commands and overwriting moves are not Removals.

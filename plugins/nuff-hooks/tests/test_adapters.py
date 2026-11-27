@@ -66,11 +66,26 @@ class ClaudeCode(unittest.TestCase):
         self.assertEqual(self.decide("Bash", {"command": "ls"}, windows=False), "allow")
 
     def test_cloud_session(self):
-        cloud = {"CLAUDE_CODE_REMOTE": "true", "CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data"}
-        self.assertEqual(self.decide("Read", {"file_path": "/etc/passwd"}, windows=False, cloud=cloud), "allow")
-        self.assertEqual(self.decide("Write", {"file_path": "/mnt/user-data/outputs/x"}, windows=False, cloud=cloud), "allow")
-        self.assertEqual(self.decide("Write", {"file_path": "/etc/x"}, windows=False, cloud=cloud), "deny")
+        dirs = {"CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data"}
+        for flag in ({"CLAUDE_CODE_REMOTE": "true"}, {"CLAUDE_CODE_REMOTE_SESSION_ID": "cse_1"},
+                     {"CLAUDE_CODE_CONTAINER_ID": "container_1"}):
+            with self.subTest(flag=flag):
+                cloud = {**flag, **dirs}
+                self.assertEqual(self.decide("Read", {"file_path": "/etc/passwd"}, windows=False, cloud=cloud), "allow")
+                self.assertEqual(self.decide("Bash", {"command": "ls ~"}, windows=False, cloud=cloud), "allow")
+                self.assertEqual(self.decide("Write", {"file_path": "/mnt/user-data/outputs/x"}, windows=False, cloud=cloud), "allow")
+                self.assertEqual(self.decide("Write", {"file_path": "/etc/x"}, windows=False, cloud=cloud), "deny")
 
+    def test_extra_dirs_need_cloud_session(self):
+        local = {"CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data", "CLAUDE_CODE_REMOTE": "false"}
+        self.assertEqual(self.decide("Write", {"file_path": "/mnt/user-data/x"}, windows=False, cloud=local), "deny")
+        self.assertEqual(self.decide("Read", {"file_path": "/etc/passwd"}, windows=False, cloud=local), "deny")
+
+    def test_copilot_ignores_cloud_variables(self):
+        event = {"sessionId": "s1", "cwd": POSIX_WORKSPACE, "toolName": "view", "toolArgs": {"path": "/etc/passwd"}}
+        env = {"COPILOT_PROJECT_DIR": POSIX_WORKSPACE, "HOME": POSIX_NO_HOME, "CLAUDE_CODE_REMOTE": "true"}
+        with mock.patch.dict("os.environ", env), mock.patch.object(copilot.core, "WINDOWS", False):
+            self.assertEqual(copilot.decide(event, event["toolArgs"]).kind, "deny")
 
 if __name__ == "__main__":
     unittest.main()

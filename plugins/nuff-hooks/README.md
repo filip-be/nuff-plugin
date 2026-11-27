@@ -2,7 +2,7 @@
 
 Shared source of the guardrail hooks shipped by [nuff-hooks-cc](../nuff-hooks-cc/README.md) (Claude Code) and [nuff-hooks-copilot](../nuff-hooks-copilot/README.md) (GitHub Copilot CLI). This folder is **not a plugin** and is not listed in the marketplace.
 
-- [Glossary](../../CONTEXT.md#guardrail-hooks) — Workspace, Read Roots, Read Zone, Write Zone, Trash, Removal, Rewrite, Cloud Session (in the root CONTEXT.md)
+- [Glossary](../../CONTEXT.md#guardrail-hooks) — Workspace, Read Roots, Read Zone, Write Zone, Trash, Removal, Rewrite (in the root CONTEXT.md)
 - Read Roots are configured in `~/.nuff-hooks.json` — see [nuff-hooks-cc](../nuff-hooks-cc/README.md#read-roots)
 - [core/nuff_hooks_core.py](./core/nuff_hooks_core.py) — platform-neutral checks; the canonical copy
 - [tests/](./tests) — unit tests, the copy-sync test and tests of the `hooks.json` launch commands (`py`, else `python3`, else deny)
