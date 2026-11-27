@@ -14,6 +14,15 @@ export type CacheState =
   | { kind: 'warm'; anchor: number }
   | { kind: 'cold' }
 
+/** A Dumb swimmer zone of the context size: below 300k, from 300k, from 500k. */
+export type Zone = 'clear' | 'drift' | 'dumb'
+
+/**
+ * The Dumb swimmer's state: the zone of the last main-conversation tool call,
+ * and how many of this turn's calls were in the Dumb zone.
+ */
+export type SwimmerState = { zone: Zone; calls: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'nuff-cc': {
@@ -25,6 +34,7 @@ declare module 'claude-code' {
       isCacheOff: boolean
       /** The last minute tick, in `$.clock.now()` milliseconds: redraws the band. */
       tick: number
+      swimmer: Shaped<SwimmerState>
     }
   }
 }

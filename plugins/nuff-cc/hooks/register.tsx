@@ -1,11 +1,13 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import { registerStatusLine, startStatusLine, statusSegments } from './statusline'
+import { registerSwimmer } from './swimmer'
 import { openInVsCode } from './vscode'
 
 // Entry point: every mod of nuff-cc registers its hooks here.
 export const register: Register = on => {
   registerStatusLine(on)
+  registerSwimmer(on)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({

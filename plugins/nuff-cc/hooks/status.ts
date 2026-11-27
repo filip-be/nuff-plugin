@@ -4,6 +4,10 @@ import type { CacheState } from '../types'
 /** The prompt-cache TTL the countdown assumes: hardcoded, not detected. */
 export const CACHE_TTL_MS = 60 * 60_000
 
+/** Context sizes of the Drift zone and the Dumb zone (absolute, any window). */
+export const DRIFT_TOKENS = 300_000
+export const DUMB_TOKENS = 500_000
+
 const MINUTE_MS = 60_000
 const WARM_MINUTES = 15
 
@@ -23,10 +27,10 @@ export function formatTokens(tokens: number): string {
 export function contextColor(tokens: number, window: number): StatusColor | undefined {
   const share = window > 0 ? tokens / window : 0
 
-  if (tokens >= 500_000 || share >= 0.8) {
+  if (tokens >= DUMB_TOKENS || share >= 0.8) {
     return 'error'
   }
-  if (tokens >= 300_000 || share >= 0.6) {
+  if (tokens >= DRIFT_TOKENS || share >= 0.6) {
     return 'warning'
   }
 
