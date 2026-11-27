@@ -43,6 +43,8 @@ class Context:
     env: dict = field(default_factory=lambda: dict(os.environ))
     loop_vars: dict = field(default_factory=dict)  # bash `for NAME in WORDS`: NAME -> WORDS
     read_roots: tuple | None = None  # (configured Read Roots, config error), loaded once by read_roots()
+    read_anywhere: bool = False  # set by an adapter whose sessions are sandboxed: reads are not checked
+    extra_write_roots: tuple = ()  # absolute directories an adapter adds to the Write Zone
 
 
 @dataclass
@@ -80,7 +82,8 @@ def trash_dir(ctx: Context) -> str:
 
 
 def _write_zone_text(ctx: Context) -> str:
-    return f"the Write Zone is the Workspace, {trash_dir(ctx)}, the agent's home dirs and the temp dir"
+    extra = "".join(f"{d}, " for d in ctx.extra_write_roots)
+    return f"the Write Zone is the Workspace, {extra}{trash_dir(ctx)}, the agent's home dirs and the temp dir"
 
 
 def _removal_hint(ctx: Context) -> str:
@@ -267,12 +270,15 @@ def _read_zone_text(ctx: Context) -> str:
 
 
 def in_read_zone(path: str, ctx: Context) -> bool:
+    if ctx.read_anywhere:
+        return True
     roots = (ctx.workspace, *default_read_roots(), *read_roots(ctx), *_agent_and_temp(ctx))
     return any(_under(path, root) for root in roots)
 
 
 def in_write_zone(path: str, ctx: Context) -> bool:
-    return any(_under(path, root) for root in (ctx.workspace, trash_dir(ctx), *_agent_and_temp(ctx)))
+    roots = (ctx.workspace, *ctx.extra_write_roots, trash_dir(ctx), *_agent_and_temp(ctx))
+    return any(_under(path, root) for root in roots)
 
 
 def in_trash(path: str, ctx: Context) -> bool:
@@ -280,6 +286,8 @@ def in_trash(path: str, ctx: Context) -> bool:
 
 
 def _require_read(token: str, ctx: Context, cwd: str, shell: str) -> None:
+    if ctx.read_anywhere:
+        return  # any read is fine, even of a path the hook can't resolve
     for path in resolve_all(token, ctx, cwd, shell):
         if path is not None and not in_read_zone(path, ctx):
             raise _Deny(f"reading '{token}' is not allowed: {_read_zone_text(ctx)}")

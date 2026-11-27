@@ -94,11 +94,15 @@ _Avoid_: recycle bin, bin
 Extra directories the user lets agents read, listed under `readRoots` in `~/.nuff-hooks.json` (e.g. `C:\DEV` on a Windows machine whose projects are not on `D:\`, or `/opt/src` on Linux). The file sits outside the Write Zone, so an agent can't widen its own Read Zone.
 _Avoid_: allowlist, read paths
 
+**Cloud Session**:
+A Claude Code session (nuff-hooks-cc only; Copilot cloud sessions are not treated this way) running in a sandboxed, throwaway cloud container (Claude Code on the web, claude.ai chats that run code), marked by `CLAUDE_CODE_REMOTE=true`. Its extra directories (`CLAUDE_ADDITIONAL_DIRECTORIES`, e.g. `/mnt/user-data`) are its **Cloud Dirs**.
+_Avoid_: remote session, web session
+
 **Read Zone**:
-Everywhere an agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp.
+Everywhere an agent may read: the Workspace, the `D:\` drive (Windows only), Read Roots, Agent Dirs and Temp. In a Claude Code Cloud Session: everywhere.
 
 **Write Zone**:
-Everywhere an agent may write: the Workspace, Trash, Agent Dirs and Temp.
+Everywhere an agent may write: the Workspace, Trash, Agent Dirs and Temp, plus the Cloud Dirs in a Claude Code Cloud Session.
 
 **Removal**:
 A shell delete command (`rm`, `rmdir`, `unlink`, `del`, `erase`, `rd`, `Remove-Item` and its aliases) aimed at files or directories. Git commands and overwriting moves are not Removals.

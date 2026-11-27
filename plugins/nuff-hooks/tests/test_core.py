@@ -520,5 +520,49 @@ class PosixReadRoots(PosixCase):
                 self.assertIn("not an absolute path like /opt/src", decision.reason)
 
 
+class ReadAnywhere(PosixCase):
+    """Adapter switches for sandboxed sessions: reads not checked, extra Write Zone roots."""
+
+    def sandboxed(self, **fields):
+        context = posix_ctx(workspace="/home/user/proj", env={"HOME": "/root", "TMPDIR": POSIX_TMPDIR})
+        context.read_anywhere = True
+        context.extra_write_roots = ("/mnt/user-data",)
+        for name, value in fields.items():
+            setattr(context, name, value)
+        return context
+
+    def test_reads_anywhere(self):
+        for path in ("/etc/passwd", "/usr/include/stdio.h", "/home/user/other/x", "/root/.ccr/README.md"):
+            with self.subTest(path=path):
+                self.assertEqual(core.check_read(path, self.sandboxed()).kind, "allow")
+        for command in ("cat /etc/hosts", "grep -r x /opt", "head $UNKNOWN/x", "cat < /etc/hosts", "ls ~"):
+            with self.subTest(command=command):
+                self.assertEqual(core.check_shell(command, "bash", self.sandboxed()).kind, "allow")
+
+    def test_writes_still_guarded(self):
+        cases = {
+            "/home/user/proj/a.py": "allow",
+            "/mnt/user-data/outputs/report.md": "allow",
+            "/root/.slop-trash/x": "allow",
+            "/etc/hosts": "deny",
+            "/home/user/other/a.py": "deny",
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(core.check_write(path, self.sandboxed()).kind, expected)
+        decision = core.check_shell("cp /etc/hosts /usr/x", "bash", self.sandboxed())
+        self.assertEqual(decision.kind, "deny")
+        self.assertIn("/mnt/user-data", decision.reason)
+
+    def test_removals_and_evasion_still_checked(self):
+        self.assertEqual(core.check_shell("rm -rf build", "bash", self.sandboxed()).kind, "rewrite")
+        self.assertEqual(core.check_shell("eval x", "bash", self.sandboxed()).kind, "deny")
+
+    def test_off_by_default(self):
+        context = posix_ctx()
+        self.assertEqual(core.check_read("/etc/passwd", context).kind, "deny")
+        self.assertEqual(core.check_write("/mnt/user-data/x", context).kind, "deny")
+
+
 if __name__ == "__main__":
     unittest.main()
