@@ -10,6 +10,7 @@ WORKSPACE = "D:\\work\\proj"
 NO_HOME = "C:\\nuff-hooks-test-home"  # has no .nuff-hooks.json, so the user's real one can't change the results
 POSIX_WORKSPACE = "/nuff-hooks-test/work/proj"
 POSIX_NO_HOME = "/nuff-hooks-test/home"
+LOCAL = {"CLAUDE_CODE_REMOTE": ""}  # a local session, even when the tests run in a Claude Code cloud session
 
 
 def load(path: Path):
@@ -26,7 +27,7 @@ cc = load(PLUGINS / "nuff-hooks-cc" / "hooks" / "nuff_hooks_cc.py")
 class Copilot(unittest.TestCase):
     def decide(self, tool, args):
         event = {"sessionId": "s1", "cwd": WORKSPACE, "toolName": tool, "toolArgs": args}
-        with mock.patch.dict("os.environ", {"COPILOT_PROJECT_DIR": WORKSPACE, "USERPROFILE": NO_HOME}), \
+        with mock.patch.dict("os.environ", {"COPILOT_PROJECT_DIR": WORKSPACE, "USERPROFILE": NO_HOME, **LOCAL}), \
                 mock.patch.object(copilot.core, "WINDOWS", True):
             return copilot.decide(event, args).kind
 
@@ -44,10 +45,10 @@ class Copilot(unittest.TestCase):
 
 
 class ClaudeCode(unittest.TestCase):
-    def decide(self, tool, args, windows=True):
+    def decide(self, tool, args, windows=True, cloud=None):
         workspace = WORKSPACE if windows else POSIX_WORKSPACE
         event = {"session_id": "s1", "cwd": workspace, "tool_name": tool, "tool_input": args}
-        env = {"CLAUDE_PROJECT_DIR": workspace, "USERPROFILE": NO_HOME, "HOME": POSIX_NO_HOME}
+        env = {"CLAUDE_PROJECT_DIR": workspace, "USERPROFILE": NO_HOME, "HOME": POSIX_NO_HOME, **LOCAL, **(cloud or {})}
         with mock.patch.dict("os.environ", env), mock.patch.object(cc.core, "WINDOWS", windows):
             return cc.decide(event).kind
 
@@ -63,6 +64,12 @@ class ClaudeCode(unittest.TestCase):
         self.assertEqual(self.decide("Write", {"file_path": POSIX_WORKSPACE + "/x"}, windows=False), "allow")
         self.assertEqual(self.decide("Bash", {"command": "cat /etc/hosts"}, windows=False), "deny")
         self.assertEqual(self.decide("Bash", {"command": "ls"}, windows=False), "allow")
+
+    def test_cloud_session(self):
+        cloud = {"CLAUDE_CODE_REMOTE": "true", "CLAUDE_ADDITIONAL_DIRECTORIES": "/mnt/user-data"}
+        self.assertEqual(self.decide("Read", {"file_path": "/etc/passwd"}, windows=False, cloud=cloud), "allow")
+        self.assertEqual(self.decide("Write", {"file_path": "/mnt/user-data/outputs/x"}, windows=False, cloud=cloud), "allow")
+        self.assertEqual(self.decide("Write", {"file_path": "/etc/x"}, windows=False, cloud=cloud), "deny")
 
 
 if __name__ == "__main__":
