@@ -46,7 +46,8 @@ export function dumbNudge(tokens: number): string {
   return (
     `nuff-cc: your context size is ${formatTokens(tokens)} tokens: you are in the Dumb zone ` +
     `(${formatTokens(DUMB_TOKENS)} and over), where your work degrades. Stop at the next safe ` +
-    'point: finish the current atomic step and do not start another. ' +
+    'point: one where the work is consistent, with no change half-made and nothing left broken ' +
+    'that worked before. Finish only what it takes to get there, and do not start a new task. ' +
     HANDOFF
   )
 }

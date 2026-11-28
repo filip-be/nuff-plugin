@@ -52,6 +52,7 @@ describe('swim', () => {
   test('the Dumb zone nudges on its first call and every 10th after it', async () => {
     const first = swim(CLEAR, 520_000)
     expect(first.nudge).toContain('Dumb zone')
+    expect(first.nudge).toContain('no change half-made')
     expect(first.nudge).toContain('Handoff')
     expect(first.nudge).toContain('.agents/PLAN.md')
     expect(first.nudge).toContain('/clear')
