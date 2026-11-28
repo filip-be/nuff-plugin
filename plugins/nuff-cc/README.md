@@ -1,6 +1,6 @@
 # nuff-cc
 
-Good enough mods for **Claude Code only**. A mod is a hooks module (`hooks/hooks.json` → `modules`) that changes Claude Code's own interface; GitHub Copilot has no equivalent, so this plugin does nothing there.
+Good enough mods for **Claude Code only**. A mod is a hooks module (`hooks/hooks.json` → `modules`) that changes Claude Code's own interface or behaviour; GitHub Copilot has no equivalent, so this plugin does nothing there.
 
 ## Mods
 
@@ -55,6 +55,37 @@ Limitations:
 - The TTL is **hardcoded to 60 minutes**, not detected. It is 5 minutes with an API key, Bedrock, Vertex or Foundry, once a subscription draws on usage credits, or with `FORCE_PROMPT_CACHING_5M`; Enterprise is unverified. In those cases the countdown is too optimistic (a resume still turns `cold` correctly, since it uses Claude Code's own TTL).
 - The plugin API reports the real `cache_ttl` only when the model is switched, so the mod cannot learn it up front (the terminal `statusLine` payload does carry it).
 - Rewind is not handled: the countdown keeps running from the last request.
+
+### Dumb swimmer
+
+The agent swims through its session until its context grows so large that its work degrades: the **Dumb zone**. This mod keeps the agent aware of where it is and gets it to stop and hand off before then. It works everywhere Claude Code runs mods (terminal, desktop, VS Code).
+
+The **context size** is the figure the status line shows: the input tokens the main conversation's next request re-sends. Subagents have contexts of their own and are not counted.
+
+| Zone | Context size | What the agent is told |
+| ---- | ------------ | ---------------------- |
+| clear | under 300k, or not known yet | nothing |
+| **Drift zone** | 300k and over | it is heading toward the Dumb zone: steer toward a stopping point and don't start large new work |
+| **Dumb zone** | 500k and over | stop at the next safe point, write a Handoff, then stop and offer you `/clear` |
+
+The thresholds are absolute: the window's size does not change them. They are the status line's warning and error figures, but the status line also colours at 60% and 80% of the window, and the nudges ignore that rule.
+
+A **Handoff** is what the agent leaves so a cleared session can carry on:
+
+- working from a plan file (such as `.agents/PLAN.md`): a Handoff section at its top with what's done, what's left and the next step
+- otherwise: a self-contained prompt in a code block, for you to paste into the fresh session
+
+The agent cannot run `/clear` itself, so it offers it to you.
+
+**Nudges** are notes only the model reads; you never see them, and they never block anything. The agent chooses where to stop.
+
+- **After a tool call** of the main conversation:
+  - a Drift Nudge each time the context size crosses up through 300k (falling back from the Dumb zone does not send one)
+  - in the Dumb zone, a Nudge on the first call and on every 10th call after it; the count starts again each turn
+- **On your prompt** in the Dumb zone: a reminder to do what you asked, keep it small, refresh the Handoff and offer `/clear` again. Only prompts you type count (at the prompt or through Remote Control). Slash commands such as `/compact`, hidden prompts, and messages from other sessions, the SDK, notifications or scheduled tasks get nothing.
+- **`/clear` or `/compact`**: once the context size is back under 500k the Nudges stop; climbing back over a threshold sends them again.
+
+The nudges are always on.
 
 ## Prerequisites
 

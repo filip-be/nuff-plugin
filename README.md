@@ -28,7 +28,7 @@ Hooks that record each agent session's state (working, needs you, done, error, e
 
 ### nuff-cc
 
-Good enough mods for **Claude Code only**. First mod: open the current session's folder in VS Code from an **Open in VS Code** button above the prompt (desktop app) or `/vscode`.
+Good enough mods for **Claude Code only**: a desktop status line (context size, prompt-cache countdown, session cost); **Dumb swimmer**, which nudges the agent toward a stopping point from 300k tokens of context and, from 500k, to write a handoff and offer you `/clear`; and opening the current session's folder in VS Code from an **Open in VS Code** button above the prompt (desktop app) or `/vscode`.
 
 See the [nuff-cc README](./plugins/nuff-cc/README.md) for details.
 
